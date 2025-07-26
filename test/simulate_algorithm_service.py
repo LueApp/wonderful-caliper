@@ -190,35 +190,12 @@ class AlgorithmService:
             return None, None
     
     def generate_array(self, image_size, rows=10):
-        """Generate a 2*N double array based on image processing"""
+        """Generate a N double array based on image processing"""
         try:
-            print(f"📊 Generating {2}x{rows} array...")
+            print(f"📊 Generating {rows} array...")
             
-            # Generate meaningful array data based on image properties
-            width, height = image_size
-            aspect_ratio = width / height
-            
-            # Create array with two rows and N columns
-            array_data = []
-            
-            # Row 1: Position-based values (normalized coordinates)
-            row1 = []
-            # Row 2: Feature-based values (simulated features)
-            row2 = []
-            
-            for i in range(rows):
-                # Row 1: Normalized position values
-                pos_value = (i / (rows - 1)) * aspect_ratio
-                row1.append(round(pos_value, 6))
-                
-                # Row 2: Simulated feature values based on image characteristics
-                feature_value = np.sin(2 * np.pi * i / rows) * (width + height) / 1000
-                row2.append(round(feature_value, 6))
-            
-            array_data = [row1, row2]
-            
-            print(f"✅ Array generated: {len(array_data)} x {len(array_data[0])}")
-            print(f"📈 Sample values: [{array_data[0][0]:.3f}, {array_data[1][0]:.3f}] to [{array_data[0][-1]:.3f}, {array_data[1][-1]:.3f}]")
+            array_data = [[0] * rows]
+            print(array_data)
             
             return array_data
             
