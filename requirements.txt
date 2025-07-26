@@ -1,0 +1,44 @@
+# EMQX Cloud + Alibaba OSS IoT System Requirements
+# Install with: pip install -r requirements.txt
+
+# Core MQTT Communication
+paho-mqtt==1.6.1               # MQTT client for EMQX Cloud communication
+
+# Alibaba Cloud Services
+oss2==2.18.4                   # Alibaba Cloud Object Storage Service SDK
+
+# File System Monitoring
+watchdog==3.0.0                # Monitor directories for new files
+
+# Data Processing & Analysis
+numpy>1.24.3                  # Numerical computing for array processing
+pillow==10.0.1                 # Image processing (PIL fork)
+
+# JSON and Data Handling
+jsonschema==4.19.1             # JSON schema validation (optional)
+
+# HTTP Requests (for API calls if needed)
+requests==2.31.0               # HTTP library for REST API calls
+
+# Configuration Management
+python-dotenv==1.0.0           # Load environment variables from .env file
+
+# Logging and Utilities
+colorlog==6.7.0                # Colored logging output (optional)
+
+# Date and Time Handling
+python-dateutil==2.8.2         # Extended date/time functionality
+
+# Optional: Database Support (if you want local data storage)
+# sqlite3 is built into Python, but you can add:
+# sqlalchemy==2.0.21           # SQL toolkit and ORM
+
+# Optional: Advanced Features
+# redis==5.0.1                 # Redis client for caching (if using Redis)
+# cryptography==41.0.4         # Encryption support for secure MQTT
+# schedule==1.2.0              # Job scheduling (for periodic tasks)
+
+# Development and Testing (optional)
+# pytest==7.4.2               # Testing framework
+# black==23.7.0                # Code formatter
+# flake8==6.0.0                # Code linting
