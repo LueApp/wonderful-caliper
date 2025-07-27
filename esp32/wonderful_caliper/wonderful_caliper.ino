@@ -1,6 +1,7 @@
 #include "my_wifi.hpp"
 #include "oss_client.hpp"
 #include "tm003_sensor.hpp"
+#include "oled_display.hpp"
 
 // Array data storage
 double arrayData[ARRAY_ROWS][MAX_ARRAY_COLS];
@@ -24,7 +25,10 @@ void setup() {
   Serial.println("ESP32-S3 Wonderful Caliper with TM003 Sensor");
   Serial.println("===========================================");
   
-  // Initialize TM003 sensor first
+  // Initialize OLED display first
+  oled_init();
+  
+  // Initialize TM003 sensor
   tm003_init();
   
   // Initialize WiFi
@@ -73,8 +77,21 @@ void loop() {
   // Read TM003 sensor measurements
   if (millis() - lastSensorRead > 125) {  // 8 Hz rate (125ms interval)
     if (tm003_read_measurement(&sensorData)) {
-      // Print sensor data
+      // Print sensor data to serial
       tm003_print_data(&sensorData);
+      
+      // Prepare display data
+      int display_index = -1;
+      double target_value = 0.0;
+      
+      // Get current measurement info if array data is available
+      if (arrayDataLoaded && currentMeasurementIndex < arrayColumns) {
+        display_index = currentMeasurementIndex;
+        target_value = arrayData[0][currentMeasurementIndex];
+      }
+      
+      // Display measurement data on OLED with index and target
+      oled_display_measurement(&sensorData, display_index, target_value);
       
       // Process measurement with array data if available
       if (arrayDataLoaded && currentMeasurementIndex < arrayColumns) {
