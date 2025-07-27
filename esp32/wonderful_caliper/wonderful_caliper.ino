@@ -23,6 +23,18 @@ int lastCompareBtnState = false;
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;  // 50ms debounce delay
 
+// Dual-color LED configuration (Red/Green LED)
+int ledCommonGPIO = 4;     // Common pin (connect to VCC for common anode)
+int ledControlGPIO = 5;    // Control pin (LOW=Red, HIGH=Green)
+
+// LED states
+enum LEDState {
+  LED_OFF,
+  LED_RED,      // Measurement failed
+  LED_GREEN,    // Measurement success
+  LED_BLINK_RED // Cycle restart due to failure
+};
+
 // Comparison data
 bool comparisonActive = false;
 float lastMeasuredValue = 0.0;
@@ -78,7 +90,44 @@ void setup() {
   
   Serial.println("[SETUP] TM003 sensor ready for relative measurements");
   Serial.println("[SETUP] Press GPIO42 button to compare measurement with target");
+  
+  // Initialize LED pins
+  pinMode(ledCommonGPIO, OUTPUT);
+  pinMode(ledControlGPIO, OUTPUT);
+  digitalWrite(ledCommonGPIO, HIGH);  // Common anode - HIGH to enable
+  setLED(LED_OFF);  // Start with LED off
+  
+  Serial.printf("[SETUP] Dual-color LED initialized - Common: GPIO%d, Control: GPIO%d\n", 
+                ledCommonGPIO, ledControlGPIO);
+  
   currentMeasurementIndex = 0;
+}
+
+// LED control functions
+void setLED(LEDState state) {
+  switch (state) {
+    case LED_OFF:
+      digitalWrite(ledCommonGPIO, LOW);   // Turn off LED
+      break;
+    case LED_RED:
+      digitalWrite(ledCommonGPIO, HIGH);  // Enable LED
+      digitalWrite(ledControlGPIO, LOW);  // Red color
+      break;
+    case LED_GREEN:
+      digitalWrite(ledCommonGPIO, HIGH);  // Enable LED
+      digitalWrite(ledControlGPIO, HIGH); // Green color
+      break;
+    case LED_BLINK_RED:
+      // Blink red 3 times
+      for (int i = 0; i < 3; i++) {
+        digitalWrite(ledCommonGPIO, HIGH);
+        digitalWrite(ledControlGPIO, LOW);  // Red
+        delay(200);
+        digitalWrite(ledCommonGPIO, LOW);   // Off
+        delay(200);
+      }
+      break;
+  }
 }
 
 // Function to perform comparison between measured and target values
@@ -124,18 +173,32 @@ void performComparison() {
   // Wait briefly to show the result
   delay(500); // Show result for 0.5 seconds
   
-  // Handle measurement result
+  // Handle measurement result and LED indication
   if (within_tolerance) {
+    // Show green LED for success
+    setLED(LED_GREEN);
+    
     currentMeasurementIndex++;
     if (currentMeasurementIndex >= arrayColumns) {
       Serial.println("[COMPARE] 🎉 All measurements completed successfully!");
       currentMeasurementIndex = 0; // Reset for next cycle
+      // Keep green LED on for completed cycle
     } else {
       Serial.printf("[COMPARE] ✅ Moving to next point: P%d\n", currentMeasurementIndex + 1);
+      // Turn off LED after 1 second to prepare for next measurement
+      delay(500);
+      setLED(LED_OFF);
     }
   } else {
+    // Show blinking red LED for failure and cycle restart
+    setLED(LED_RED);
+    
     Serial.printf("[COMPARE] ❌ Measurement failed at P%d - restarting cycle from P1\n", currentMeasurementIndex + 1);
     currentMeasurementIndex = 0; // Reset to start of cycle
+    
+    // Turn off LED after showing failure
+    delay(500);
+    setLED(LED_OFF);
   }
 }
 
