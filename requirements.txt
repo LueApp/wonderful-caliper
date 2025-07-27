@@ -11,7 +11,8 @@ oss2==2.18.4                   # Alibaba Cloud Object Storage Service SDK
 watchdog==3.0.0                # Monitor directories for new files
 
 # Data Processing & Analysis
-numpy>1.24.3                  # Numerical computing for array processing
+numpy>=1.24.3                  # Numerical computing for array processing
+pandas>=2.0.0                  # Data analysis and manipulation library
 pillow==10.0.1                 # Image processing (PIL fork)
 
 # JSON and Data Handling
