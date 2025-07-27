@@ -228,9 +228,16 @@ class AlgorithmService:
                 print(f"📤 Uploading array data to OSS...")
                 self.oss_bucket.put_object(array_key, array_json)
                 
+                # Also save to fixed filename for ESP32 to fetch
+                latest_array_key = "arrays/latest_array.json"
+                print(f"📤 Updating latest array file for ESP32...")
+                self.oss_bucket.put_object(latest_array_key, array_json)
+                
                 results['array_key'] = array_key
+                results['latest_array_key'] = latest_array_key
                 results['array_data'] = array_data
                 print(f"✅ Array data uploaded: {array_key}")
+                print(f"✅ Latest array updated: {latest_array_key} (for ESP32)")
             
             return results
             
