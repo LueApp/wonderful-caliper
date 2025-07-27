@@ -18,6 +18,9 @@ pillow==10.0.1                 # Image processing (PIL fork)
 # JSON and Data Handling
 jsonschema==4.19.1             # JSON schema validation (optional)
 
+# GUI Framework
+# PyQt5>=5.15.0                  # Desktop GUI framework for PC application
+
 # HTTP Requests (for API calls if needed)
 requests==2.31.0               # HTTP library for REST API calls
 
