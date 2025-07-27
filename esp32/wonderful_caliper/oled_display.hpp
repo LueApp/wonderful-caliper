@@ -24,6 +24,7 @@ bool oled_initialized = false;
 // Function declarations
 void oled_init();
 void oled_display_measurement(const TM003SensorData* data, int current_index = -1, double target_value = 0.0);
+void oled_display_comparison_result(float measured, float target, float difference, bool pass);
 void oled_clear();
 
 // Initialize OLED display
@@ -90,6 +91,35 @@ void oled_display_measurement(const TM003SensorData* data, int current_index, do
     display.println("Sensor Error");
     display.println("No Data");
   }
+  
+  display.display();
+}
+
+// Display comparison result
+void oled_display_comparison_result(float measured, float target, float difference, bool pass) {
+  if (!oled_initialized) return;
+  
+  display.clearDisplay();
+  
+  // Display result status
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.printf("%s", pass ? "PASS" : "FAIL");
+  
+  // Display difference
+  display.setTextSize(1);
+  display.setCursor(50, 0);
+  display.printf("Diff:%+.2f", difference);
+  
+  // Display measured vs target
+  display.setTextSize(1);
+  display.setCursor(0, 12);
+  display.printf("M:%.2f T:%.2f", measured, target);
+  
+  // Display progress indicator
+  display.setTextSize(1);
+  display.setCursor(0, 24);
+  display.printf("Press for next...");
   
   display.display();
 }

@@ -14,8 +14,20 @@ TM003SensorData sensorData;
 unsigned long lastSensorRead = 0;
 int currentMeasurementIndex = 0;
 
-int btnGPIO = 0;
+// Button configuration
+int btnGPIO = 0;           // Boot button for array data re-fetch
 int btnState = false;
+int compareBtnGPIO = 42;   // Comparison button connected to 3.3V
+int compareBtnState = false;
+int lastCompareBtnState = false;
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;  // 50ms debounce delay
+
+// Comparison data
+bool comparisonActive = false;
+float lastMeasuredValue = 0.0;
+float lastTargetValue = 0.0;
+int lastMeasurementIndex = -1;
 
 void setup() {
   Serial.begin(115200);
@@ -45,6 +57,9 @@ void setup() {
   // Set GPIO0 Boot button as input (for manual re-fetch)
   pinMode(btnGPIO, INPUT);
   
+  // Set GPIO42 as input for comparison button (connected to 3.3V, so INPUT_PULLDOWN)
+  pinMode(compareBtnGPIO, INPUT_PULLDOWN);
+  
   Serial.println("[SETUP] Initialization complete!");
   if (arrayDataLoaded) {
     Serial.println("[SETUP] ✅ Array data loaded successfully");
@@ -62,7 +77,66 @@ void setup() {
   }
   
   Serial.println("[SETUP] TM003 sensor ready for relative measurements");
+  Serial.println("[SETUP] Press GPIO42 button to compare measurement with target");
   currentMeasurementIndex = 0;
+}
+
+// Function to perform comparison between measured and target values
+void performComparison() {
+  // Only perform comparison if we're in an active measurement sequence
+  if (!(arrayDataLoaded && currentMeasurementIndex < arrayColumns)) {
+    Serial.println("[COMPARE] ❌ No active measurement sequence");
+    return;
+  }
+  
+  if (!sensorData.data_valid) {
+    Serial.println("[COMPARE] ❌ No valid sensor data");
+    return;
+  }
+  
+  // Get current values
+  float measured = sensorData.displacement_mm;
+  float target = arrayData[0][currentMeasurementIndex];
+  float difference = measured - target;
+  float tolerance = 0.05; // 0.05mm tolerance
+  
+  // Store comparison data
+  lastMeasuredValue = measured;
+  lastTargetValue = target;
+  lastMeasurementIndex = currentMeasurementIndex;
+  comparisonActive = true;
+  
+  // Determine result
+  bool within_tolerance = abs(difference) <= tolerance;
+  
+  Serial.println("=== MEASUREMENT COMPARISON ===");
+  Serial.printf("[COMPARE] Point: P%d\n", currentMeasurementIndex + 1);
+  Serial.printf("[COMPARE] Target:   %.2f mm\n", target);
+  Serial.printf("[COMPARE] Measured: %.2f mm\n", measured);
+  Serial.printf("[COMPARE] Difference: %+.2f mm\n", difference);
+  Serial.printf("[COMPARE] Tolerance: ±%.2f mm\n", tolerance);
+  Serial.printf("[COMPARE] Result: %s\n", within_tolerance ? "✅ PASS" : "❌ FAIL");
+  Serial.println("==============================");
+  
+  // Display comparison result on OLED
+  oled_display_comparison_result(measured, target, difference, within_tolerance);
+  
+  // Wait briefly to show the result
+  delay(500); // Show result for 0.5 seconds
+  
+  // Handle measurement result
+  if (within_tolerance) {
+    currentMeasurementIndex++;
+    if (currentMeasurementIndex >= arrayColumns) {
+      Serial.println("[COMPARE] 🎉 All measurements completed successfully!");
+      currentMeasurementIndex = 0; // Reset for next cycle
+    } else {
+      Serial.printf("[COMPARE] ✅ Moving to next point: P%d\n", currentMeasurementIndex + 1);
+    }
+  } else {
+    Serial.printf("[COMPARE] ❌ Measurement failed at P%d - restarting cycle from P1\n", currentMeasurementIndex + 1);
+    currentMeasurementIndex = 0; // Reset to start of cycle
+  }
 }
 
 void loop() {
@@ -73,6 +147,27 @@ void loop() {
   //   fetch_array_from_oss();
   //   delay(1000);  // Debounce
   // }
+  
+  // Handle comparison button with debouncing
+  int reading = digitalRead(compareBtnGPIO);
+  
+  if (reading != lastCompareBtnState) {
+    lastDebounceTime = millis();
+  }
+  
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading != compareBtnState) {
+      compareBtnState = reading;
+      
+      // Button pressed (HIGH because connected to 3.3V)
+      if (compareBtnState == HIGH) {
+        Serial.println("[MAIN] 🔘 Comparison button pressed!");
+        performComparison();
+      }
+    }
+  }
+  
+  lastCompareBtnState = reading;
   
   // Read TM003 sensor measurements
   if (millis() - lastSensorRead > 125) {  // 8 Hz rate (125ms interval)
@@ -92,23 +187,6 @@ void loop() {
       
       // Display measurement data on OLED with index and target
       oled_display_measurement(&sensorData, display_index, target_value);
-      
-      // Process measurement with array data if available
-      if (arrayDataLoaded && currentMeasurementIndex < arrayColumns) {
-        double expected_value = arrayData[0][currentMeasurementIndex];
-        double measured_value = sensorData.displacement_mm;
-        double difference = measured_value - expected_value;
-        
-        Serial.printf("[MEASUREMENT] Index: %d | Expected: %.2f mm | Measured: %.2f mm | Diff: %.2f mm\n",
-                      currentMeasurementIndex + 1, expected_value, measured_value, difference);
-        
-        // Move to next measurement point
-        currentMeasurementIndex++;
-        if (currentMeasurementIndex >= arrayColumns) {
-          Serial.println("[MEASUREMENT] ✅ Measurement sequence completed!");
-          currentMeasurementIndex = 0;  // Reset for next cycle
-        }
-      }
       
       lastSensorRead = millis();
     } else {
