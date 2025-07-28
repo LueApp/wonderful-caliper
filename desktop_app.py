@@ -188,6 +188,7 @@ class DesktopApp(QMainWindow):
         # State tracking
         self.waiting_for_result = False
         self.current_upload = None
+        self.current_upload_file = None  # Store original file path for display
         
     def setup_oss(self):
         """Initialize OSS client"""
@@ -266,11 +267,42 @@ class DesktopApp(QMainWindow):
         self.results_text.setMaximumHeight(200)
         results_layout.addWidget(self.results_text)
         
-        # Processed image display (placeholder)
-        self.image_label = QLabel("Processed image will appear here")
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("border: 1px solid gray; min-height: 200px;")
-        results_layout.addWidget(self.image_label)
+        # Image display section
+        image_layout = QHBoxLayout()
+        
+        # Original image display
+        original_group = QGroupBox("Original Image")
+        original_layout = QVBoxLayout(original_group)
+        self.original_image_label = QLabel("Original image will appear here")
+        self.original_image_label.setAlignment(Qt.AlignCenter)
+        self.original_image_label.setStyleSheet("border: 1px solid gray; min-height: 250px; min-width: 300px;")
+        self.original_image_label.setScaledContents(False)  # Don't stretch image
+        original_layout.addWidget(self.original_image_label)
+        image_layout.addWidget(original_group)
+        
+        # Processed image display
+        processed_group = QGroupBox("Processed Image")
+        processed_layout = QVBoxLayout(processed_group)
+        self.processed_image_label = QLabel("Processed image will appear here")
+        self.processed_image_label.setAlignment(Qt.AlignCenter)
+        self.processed_image_label.setStyleSheet("border: 1px solid gray; min-height: 250px; min-width: 300px;")
+        self.processed_image_label.setScaledContents(False)  # Don't stretch image
+        processed_layout.addWidget(self.processed_image_label)
+        image_layout.addWidget(processed_group)
+        
+        results_layout.addLayout(image_layout)
+        
+        # Array data display section
+        array_group = QGroupBox("Array Data")
+        array_layout = QVBoxLayout(array_group)
+        
+        self.array_text = QTextEdit()
+        self.array_text.setReadOnly(True)
+        self.array_text.setMaximumHeight(100)
+        self.array_text.setPlaceholderText("Array data will appear here after processing...")
+        array_layout.addWidget(self.array_text)
+        
+        results_layout.addWidget(array_group)
         
         layout.addWidget(results_group)
         
@@ -354,6 +386,10 @@ class DesktopApp(QMainWindow):
             with open(file_path, 'rb') as file_obj:
                 self.oss_bucket.put_object(oss_key, file_obj)
             
+            # Store original file path and display original image
+            self.current_upload_file = file_path
+            self.display_original_image(file_path)
+            
             # Notify algorithm service via MQTT
             if self.mqtt_worker.publish_file_notification(oss_key, filename):
                 self.upload_status.setText(f"Uploaded: {filename}")
@@ -394,15 +430,17 @@ class DesktopApp(QMainWindow):
             timestamp = datetime.now().strftime('%H:%M:%S')
             self.results_text.append(f"[{timestamp}] Processing completed!")
             
-            # Display processed image key
+            # Display processed image key and download image
             processed_key = payload.get('processed_photo_key')
             if processed_key:
                 self.results_text.append(f"Processed image: {processed_key}")
+                self.download_and_display_processed_image(processed_key)
             
             # Display array data
             array_data = payload.get('array_data')
             if array_data:
                 self.results_text.append(f"Array data: {array_data}")
+                self.display_array_data(array_data)
             
             # Scroll to bottom
             cursor = self.results_text.textCursor()
@@ -447,6 +485,74 @@ class DesktopApp(QMainWindow):
         
         except Exception as e:
             pass
+    
+    def display_original_image(self, file_path):
+        """Display original image in the UI"""
+        try:
+            pixmap = QPixmap(file_path)
+            if not pixmap.isNull():
+                # Scale image to fit the label while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(300, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.original_image_label.setPixmap(scaled_pixmap)
+                self.original_image_label.setText("")  # Clear placeholder text
+            else:
+                self.original_image_label.setText("Failed to load original image")
+        except Exception as e:
+            self.original_image_label.setText(f"Error loading image: {e}")
+    
+    def download_and_display_processed_image(self, oss_key):
+        """Download processed image from OSS and display it"""
+        try:
+            # Download image from OSS
+            obj = self.oss_bucket.get_object(oss_key)
+            image_data = obj.read()
+            
+            # Create QPixmap from image data
+            pixmap = QPixmap()
+            if pixmap.loadFromData(image_data):
+                # Scale image to fit the label while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(300, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.processed_image_label.setPixmap(scaled_pixmap)
+                self.processed_image_label.setText("")  # Clear placeholder text
+                self.results_text.append(f"✅ Processed image displayed")
+            else:
+                self.processed_image_label.setText("Failed to load processed image")
+                self.results_text.append("❌ Failed to load processed image")
+                
+        except Exception as e:
+            self.processed_image_label.setText(f"Error loading processed image: {e}")
+            self.results_text.append(f"❌ Error downloading processed image: {e}")
+    
+    def display_array_data(self, array_data):
+        """Display array data in the array text area"""
+        try:
+            if isinstance(array_data, list):
+                # Format array data nicely
+                if len(array_data) > 0 and isinstance(array_data[0], list):
+                    # 2D array format
+                    formatted_text = "Array Data (2D):\n"
+                    for i, row in enumerate(array_data):
+                        formatted_text += f"Row {i+1}: [{', '.join([f'{val:.2f}' if isinstance(val, (int, float)) else str(val) for val in row])}]\n"
+                else:
+                    # 1D array format
+                    formatted_text = "Array Data (1D):\n"
+                    formatted_text += f"[{', '.join([f'{val:.2f}' if isinstance(val, (int, float)) else str(val) for val in array_data])}]\n"
+                
+                formatted_text += f"\nTotal elements: {len(array_data)}"
+                if len(array_data) > 0 and isinstance(array_data[0], list):
+                    formatted_text += f" rows, {len(array_data[0])} columns"
+                
+            elif isinstance(array_data, str):
+                # String representation of array
+                formatted_text = f"Array Data:\n{array_data}"
+            else:
+                # Other format
+                formatted_text = f"Array Data:\n{str(array_data)}"
+            
+            self.array_text.setPlainText(formatted_text)
+            
+        except Exception as e:
+            self.array_text.setPlainText(f"Error displaying array data: {e}")
     
     def closeEvent(self, event):
         """Handle application close"""
