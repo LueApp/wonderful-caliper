@@ -15,12 +15,25 @@ import json
 import time
 import threading
 import uuid
+import io
 from datetime import datetime, timedelta
 from collections import deque
 import numpy as np
 import pandas as pd
 import oss2
 import paho.mqtt.client as mqtt
+
+# Statistical analysis and visualization
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import seaborn as sns
+from scipy import stats
+from sklearn.ensemble import IsolationForest
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import warnings
+warnings.filterwarnings('ignore')
 
 # Add parent directory to path to import config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -47,8 +60,17 @@ class DataProcessingService:
             'data_count': 0,
             'statistics': {},
             'trends': {},
-            'alerts': []
+            'alerts': [],
+            'quality_analysis': {},
+            'charts': {},
+            'process_capability': {}
         }
+        
+        # Quality control parameters
+        self.target_value = 0.0  # Target dimension value
+        self.tolerance = 0.05    # ±0.05mm tolerance
+        self.usl = self.target_value + self.tolerance  # Upper Specification Limit
+        self.lsl = self.target_value - self.tolerance  # Lower Specification Limit
         
         # Timing
         self.last_upload = time.time()
@@ -186,102 +208,668 @@ class DataProcessingService:
             print(f"❌ Error loading historical data: {e}")
     
     def analyze_data(self):
-        """Perform data analysis on current dataset"""
+        """Comprehensive statistical analysis of measurement data"""
         with self.analysis_lock:
-            if len(self.realtime_buffer) < 2:
+            if len(self.realtime_buffer) < 10:
                 return
             
             # Convert to pandas for analysis
             df = pd.DataFrame(list(self.realtime_buffer))
             
             try:
-                # Basic statistics
-                stats = {
-                    'data_points': len(df),
-                    'time_range': {
-                        'start': df['datetime'].min().isoformat(),
-                        'end': df['datetime'].max().isoformat(),
-                        'duration_minutes': (df['datetime'].max() - df['datetime'].min()).total_seconds() / 60
-                    },
-                    'int_stats': {
-                        'mean': float(df['int_value'].mean()),
-                        'min': int(df['int_value'].min()),
-                        'max': int(df['int_value'].max()),
-                        'std': float(df['int_value'].std()) if len(df) > 1 else 0.0
-                    },
-                    'float_stats': {
-                        'mean': float(df['float_value'].mean()),
-                        'min': float(df['float_value'].min()),
-                        'max': float(df['float_value'].max()),
-                        'std': float(df['float_value'].std()) if len(df) > 1 else 0.0
-                    },
-                    'bool_stats': {
-                        'true_count': int(df['bool_value'].sum()),
-                        'false_count': int((~df['bool_value']).sum()),
-                        'true_percentage': float(df['bool_value'].mean() * 100)
-                    }
-                }
+                # Extract measurement data (float_value = measurement, bool_value = pass/fail)
+                measurements = df['float_value'].values
+                pass_fail = df['bool_value'].values
                 
-                # Trend analysis (if enough data)
-                trends = {}
-                if len(df) >= 5:
-                    # Calculate moving averages
-                    df['float_ma5'] = df['float_value'].rolling(window=5, min_periods=1).mean()
-                    df['int_ma5'] = df['int_value'].rolling(window=5, min_periods=1).mean()
-                    
-                    trends = {
-                        'float_trend': 'increasing' if df['float_value'].tail(3).mean() > df['float_value'].head(3).mean() else 'decreasing',
-                        'int_trend': 'increasing' if df['int_value'].tail(3).mean() > df['int_value'].head(3).mean() else 'decreasing',
-                        'recent_float_avg': float(df['float_value'].tail(5).mean()),
-                        'recent_int_avg': float(df['int_value'].tail(5).mean())
-                    }
+                # 1. Descriptive Statistics (描述性统计分析)
+                descriptive_stats = self.calculate_descriptive_statistics(measurements)
                 
-                # Generate alerts
-                alerts = []
+                # 2. Dimension Deviation Distribution (尺寸偏差分布)
+                deviation_analysis = self.calculate_deviation_analysis(measurements)
                 
-                # Alert: High float values
-                if stats['float_stats']['max'] > 80:
-                    alerts.append({
-                        'type': 'high_float_value',
-                        'message': f"Float value exceeded 80: {stats['float_stats']['max']:.2f}",
-                        'severity': 'warning',
-                        'timestamp': datetime.now().isoformat()
-                    })
+                # 3. Pass Rate Analysis (合格率的分析)
+                pass_rate_analysis = self.calculate_pass_rate_analysis(pass_fail, measurements)
                 
-                # Alert: All boolean values are same
-                if len(df) > 5 and (stats['bool_stats']['true_percentage'] == 100 or stats['bool_stats']['true_percentage'] == 0):
-                    alerts.append({
-                        'type': 'boolean_stuck',
-                        'message': f"Boolean values stuck at {stats['bool_stats']['true_percentage']:.0f}%",
-                        'severity': 'info',
-                        'timestamp': datetime.now().isoformat()
-                    })
+                # 4. Process Capability Indices (过程能力指数 CPK/PPK)
+                process_capability = self.calculate_process_capability(measurements)
                 
-                # Alert: High variability in int values
-                if len(df) > 10 and stats['int_stats']['std'] > 50:
-                    alerts.append({
-                        'type': 'high_variability',
-                        'message': f"High int value variability: std={stats['int_stats']['std']:.2f}",
-                        'severity': 'info',
-                        'timestamp': datetime.now().isoformat()
-                    })
+                # 5. Tolerance Utilization (公差利用率)
+                tolerance_utilization = self.calculate_tolerance_utilization(measurements)
+                
+                # 6. Correlation Analysis (尺寸间的相关性)
+                correlation_analysis = self.calculate_correlation_analysis(df)
+                
+                # 7. Time Series Analysis (X-bar图、R图)
+                time_series_analysis = self.calculate_time_series_analysis(df)
+                
+                # 8. Clustering Analysis (聚类分析)
+                clustering_analysis = self.calculate_clustering_analysis(measurements)
+                
+                # 9. AI Anomaly Detection (AI异常检测模型)
+                anomaly_detection = self.detect_anomalies(measurements)
+                
+                # Generate charts and save as base64
+                charts = self.generate_all_charts(df, measurements)
                 
                 # Update analysis results
                 self.analysis_results = {
                     'last_analysis': datetime.now().isoformat(),
                     'data_count': len(self.historical_data),
-                    'statistics': stats,
-                    'trends': trends,
-                    'alerts': alerts
+                    'descriptive_statistics': descriptive_stats,
+                    'deviation_analysis': deviation_analysis,
+                    'pass_rate_analysis': pass_rate_analysis,
+                    'process_capability': process_capability,
+                    'tolerance_utilization': tolerance_utilization,
+                    'correlation_analysis': correlation_analysis,
+                    'time_series_analysis': time_series_analysis,
+                    'clustering_analysis': clustering_analysis,
+                    'anomaly_detection': anomaly_detection,
+                    'charts': charts,
+                    'alerts': self.generate_quality_alerts(measurements, pass_fail)
                 }
                 
                 # Print brief status
                 if len(df) % 5 == 0:  # Print every 5th analysis
-                    print(f"📈 Analysis: {len(df)} points, Float avg: {stats['float_stats']['mean']:.2f}, "
-                          f"Int avg: {stats['int_stats']['mean']:.1f}, Bool: {stats['bool_stats']['true_percentage']:.0f}%")
+                    pass_rate = pass_rate_analysis.get('pass_rate', 0)
+                    mean_val = descriptive_stats.get('mean', 0)
+                    cpk = process_capability.get('cpk', 0)
+                    print(f"📈 Analysis: {len(df)} points, Mean: {mean_val:.3f}mm, Pass Rate: {pass_rate:.1f}%, CPK: {cpk:.2f}")
+                    print(f"Int avg: {stats['int_stats']['mean']:.1f}, Bool: {stats['bool_stats']['true_percentage']:.0f}%")
                 
             except Exception as e:
                 print(f"❌ Analysis error: {e}")
+    
+    def calculate_descriptive_statistics(self, measurements):
+        """1. 描述性统计分析 (Descriptive Statistics)"""
+        if len(measurements) == 0:
+            return {}
+        
+        return {
+            'count': len(measurements),
+            'mean': float(np.mean(measurements)),
+            'median': float(np.median(measurements)),
+            'std': float(np.std(measurements, ddof=1)),
+            'variance': float(np.var(measurements, ddof=1)),
+            'min': float(np.min(measurements)),
+            'max': float(np.max(measurements)),
+            'range': float(np.max(measurements) - np.min(measurements)),
+            'q25': float(np.percentile(measurements, 25)),
+            'q75': float(np.percentile(measurements, 75)),
+            'iqr': float(np.percentile(measurements, 75) - np.percentile(measurements, 25)),
+            'skewness': float(stats.skew(measurements)),
+            'kurtosis': float(stats.kurtosis(measurements))
+        }
+    
+    def calculate_deviation_analysis(self, measurements):
+        """2. 尺寸偏差分布 (Dimension Deviation Distribution)"""
+        deviations = measurements - self.target_value
+        
+        return {
+            'mean_deviation': float(np.mean(deviations)),
+            'std_deviation': float(np.std(deviations, ddof=1)),
+            'max_positive_deviation': float(np.max(deviations)),
+            'max_negative_deviation': float(np.min(deviations)),
+            'deviation_range': float(np.max(deviations) - np.min(deviations)),
+            'within_tolerance_count': int(np.sum(np.abs(deviations) <= self.tolerance)),
+            'outside_tolerance_count': int(np.sum(np.abs(deviations) > self.tolerance))
+        }
+    
+    def calculate_pass_rate_analysis(self, pass_fail, measurements):
+        """3. 合格率的分析 (Pass Rate Analysis)"""
+        total_count = len(pass_fail)
+        if total_count == 0:
+            return {}
+        
+        pass_count = np.sum(pass_fail)
+        fail_count = total_count - pass_count
+        
+        # Calculate pass rate by tolerance
+        within_tolerance = np.abs(measurements - self.target_value) <= self.tolerance
+        tolerance_pass_rate = np.sum(within_tolerance) / total_count * 100
+        
+        return {
+            'total_measurements': total_count,
+            'pass_count': int(pass_count),
+            'fail_count': int(fail_count),
+            'pass_rate': float(pass_count / total_count * 100),
+            'fail_rate': float(fail_count / total_count * 100),
+            'tolerance_pass_rate': float(tolerance_pass_rate),
+            'tolerance_fail_rate': float(100 - tolerance_pass_rate)
+        }
+    
+    def calculate_process_capability(self, measurements):
+        """4. 过程能力指数 CPK/PPK (Process Capability Indices)"""
+        if len(measurements) < 2:
+            return {}
+        
+        mean = np.mean(measurements)
+        std = np.std(measurements, ddof=1)
+        
+        if std == 0:
+            return {'cpk': float('inf'), 'ppk': float('inf'), 'cp': float('inf'), 'pp': float('inf')}
+        
+        # Process Capability (Cp, Cpk)
+        cp = (self.usl - self.lsl) / (6 * std)
+        cpu = (self.usl - mean) / (3 * std)
+        cpl = (mean - self.lsl) / (3 * std)
+        cpk = min(cpu, cpl)
+        
+        # Process Performance (Pp, Ppk) - using overall std
+        pp = (self.usl - self.lsl) / (6 * std)
+        ppu = (self.usl - mean) / (3 * std)
+        ppl = (mean - self.lsl) / (3 * std)
+        ppk = min(ppu, ppl)
+        
+        return {
+            'cp': float(cp),
+            'cpk': float(cpk),
+            'cpu': float(cpu),
+            'cpl': float(cpl),
+            'pp': float(pp),
+            'ppk': float(ppk),
+            'ppu': float(ppu),
+            'ppl': float(ppl),
+            'process_mean': float(mean),
+            'process_std': float(std),
+            'capability_assessment': self.assess_capability(cpk)
+        }
+    
+    def assess_capability(self, cpk):
+        """Assess process capability based on CPK value"""
+        if cpk >= 2.0:
+            return "Excellent"
+        elif cpk >= 1.67:
+            return "Good"
+        elif cpk >= 1.33:
+            return "Adequate"
+        elif cpk >= 1.0:
+            return "Marginal"
+        else:
+            return "Poor"
+    
+    def calculate_tolerance_utilization(self, measurements):
+        """5. 公差利用率 (Tolerance Utilization)"""
+        if len(measurements) < 2:
+            return {}
+        
+        process_spread = 6 * np.std(measurements, ddof=1)  # 6σ spread
+        tolerance_spread = self.usl - self.lsl
+        
+        utilization = process_spread / tolerance_spread * 100
+        
+        return {
+            'tolerance_spread': float(tolerance_spread),
+            'process_spread': float(process_spread),
+            'utilization_percentage': float(utilization),
+            'utilization_assessment': self.assess_utilization(utilization)
+        }
+    
+    def assess_utilization(self, utilization):
+        """Assess tolerance utilization"""
+        if utilization <= 50:
+            return "Under-utilized"
+        elif utilization <= 75:
+            return "Well-utilized"
+        elif utilization <= 90:
+            return "Efficiently-utilized"
+        else:
+            return "Over-utilized"
+    
+    def calculate_correlation_analysis(self, df):
+        """6. 尺寸间的相关性 (Correlation Analysis)"""
+        numeric_cols = ['int_value', 'float_value']
+        if len(df) < 3:
+            return {}
+        
+        # Calculate correlation matrix
+        correlation_matrix = df[numeric_cols].corr()
+        
+        return {
+            'correlation_matrix': correlation_matrix.to_dict(),
+            'int_float_correlation': float(correlation_matrix.loc['int_value', 'float_value']),
+            'correlation_strength': self.assess_correlation(correlation_matrix.loc['int_value', 'float_value'])
+        }
+    
+    def assess_correlation(self, corr_value):
+        """Assess correlation strength"""
+        abs_corr = abs(corr_value)
+        if abs_corr >= 0.8:
+            return "Very Strong"
+        elif abs_corr >= 0.6:
+            return "Strong"
+        elif abs_corr >= 0.4:
+            return "Moderate"
+        elif abs_corr >= 0.2:
+            return "Weak"
+        else:
+            return "Very Weak"
+    
+    def calculate_time_series_analysis(self, df):
+        """7. 时间序列分析 X-bar图、R图 (Time Series Analysis)"""
+        if len(df) < 5:
+            return {}
+        
+        measurements = df['float_value'].values
+        subgroup_size = 5
+        
+        # Create subgroups
+        subgroups = []
+        for i in range(0, len(measurements) - subgroup_size + 1, subgroup_size):
+            subgroups.append(measurements[i:i+subgroup_size])
+        
+        if len(subgroups) < 2:
+            return {}
+        
+        # Calculate X-bar (subgroup means) and R (subgroup ranges)
+        xbar_values = [np.mean(subgroup) for subgroup in subgroups]
+        r_values = [np.max(subgroup) - np.min(subgroup) for subgroup in subgroups]
+        
+        # Control limits
+        xbar_mean = np.mean(xbar_values)
+        r_mean = np.mean(r_values)
+        
+        # Constants for control limits (for subgroup size 5)
+        A2 = 0.577
+        D3 = 0.0
+        D4 = 2.114
+        
+        xbar_ucl = xbar_mean + A2 * r_mean
+        xbar_lcl = xbar_mean - A2 * r_mean
+        r_ucl = D4 * r_mean
+        r_lcl = D3 * r_mean
+        
+        return {
+            'xbar_values': xbar_values,
+            'r_values': r_values,
+            'xbar_mean': float(xbar_mean),
+            'r_mean': float(r_mean),
+            'xbar_ucl': float(xbar_ucl),
+            'xbar_lcl': float(xbar_lcl),
+            'r_ucl': float(r_ucl),
+            'r_lcl': float(r_lcl),
+            'subgroup_count': len(subgroups),
+            'process_stability': self.assess_process_stability(xbar_values, r_values, xbar_ucl, xbar_lcl, r_ucl, r_lcl)
+        }
+    
+    def assess_process_stability(self, xbar_values, r_values, xbar_ucl, xbar_lcl, r_ucl, r_lcl):
+        """Assess process stability based on control charts"""
+        xbar_out_of_control = sum(1 for x in xbar_values if x > xbar_ucl or x < xbar_lcl)
+        r_out_of_control = sum(1 for r in r_values if r > r_ucl or r < r_lcl)
+        
+        if xbar_out_of_control == 0 and r_out_of_control == 0:
+            return "Stable"
+        elif xbar_out_of_control <= 1 and r_out_of_control <= 1:
+            return "Marginally Stable"
+        else:
+            return "Unstable"
+    
+    def calculate_clustering_analysis(self, measurements):
+        """8. 聚类分析 (Clustering Analysis)"""
+        if len(measurements) < 6:
+            return {}
+        
+        # Prepare data for clustering
+        data = measurements.reshape(-1, 1)
+        scaler = StandardScaler()
+        scaled_data = scaler.fit_transform(data)
+        
+        # K-means clustering with 2-3 clusters
+        optimal_clusters = min(3, len(measurements) // 3)
+        if optimal_clusters < 2:
+            optimal_clusters = 2
+        
+        kmeans = KMeans(n_clusters=optimal_clusters, random_state=42, n_init=10)
+        cluster_labels = kmeans.fit_predict(scaled_data)
+        
+        # Analyze clusters
+        cluster_info = {}
+        for i in range(optimal_clusters):
+            cluster_data = measurements[cluster_labels == i]
+            if len(cluster_data) > 0:
+                cluster_info[f'cluster_{i}'] = {
+                    'count': len(cluster_data),
+                    'mean': float(np.mean(cluster_data)),
+                    'std': float(np.std(cluster_data, ddof=1)) if len(cluster_data) > 1 else 0.0,
+                    'min': float(np.min(cluster_data)),
+                    'max': float(np.max(cluster_data))
+                }
+        
+        return {
+            'cluster_count': optimal_clusters,
+            'cluster_labels': cluster_labels.tolist(),
+            'cluster_info': cluster_info,
+            'silhouette_score': float(self.calculate_silhouette_score(scaled_data, cluster_labels))
+        }
+    
+    def calculate_silhouette_score(self, data, labels):
+        """Calculate silhouette score for clustering quality"""
+        try:
+            from sklearn.metrics import silhouette_score
+            return silhouette_score(data, labels)
+        except:
+            return 0.0
+    
+    def detect_anomalies(self, measurements):
+        """9. AI异常检测模型 (AI Anomaly Detection using Isolation Forest)"""
+        if len(measurements) < 10:
+            return {}
+        
+        # Prepare data
+        data = measurements.reshape(-1, 1)
+        
+        # Isolation Forest for anomaly detection
+        iso_forest = IsolationForest(contamination=0.1, random_state=42)
+        anomaly_labels = iso_forest.fit_predict(data)
+        
+        # Identify anomalies (-1 = anomaly, 1 = normal)
+        anomaly_indices = np.where(anomaly_labels == -1)[0]
+        anomaly_values = measurements[anomaly_indices]
+        
+        return {
+            'total_points': len(measurements),
+            'anomaly_count': len(anomaly_indices),
+            'anomaly_rate': float(len(anomaly_indices) / len(measurements) * 100),
+            'anomaly_indices': anomaly_indices.tolist(),
+            'anomaly_values': anomaly_values.tolist(),
+            'anomaly_threshold': float(np.percentile(measurements, 10)),  # Approximate threshold
+            'model_type': 'Isolation Forest'
+        }
+    
+    def generate_quality_alerts(self, measurements, pass_fail):
+        """Generate quality control alerts"""
+        alerts = []
+        
+        if len(measurements) < 5:
+            return alerts
+        
+        # Alert: Low pass rate
+        pass_rate = np.mean(pass_fail) * 100
+        if pass_rate < 80:
+            alerts.append({
+                'type': 'low_pass_rate',
+                'message': f"Pass rate below 80%: {pass_rate:.1f}%",
+                'severity': 'critical',
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        # Alert: High process variation
+        std = np.std(measurements, ddof=1)
+        if std > self.tolerance / 3:  # If std > 1/3 of tolerance
+            alerts.append({
+                'type': 'high_variation',
+                'message': f"High process variation: σ={std:.4f}mm",
+                'severity': 'warning',
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        # Alert: Process mean shift
+        mean = np.mean(measurements)
+        if abs(mean - self.target_value) > self.tolerance / 2:
+            alerts.append({
+                'type': 'mean_shift',
+                'message': f"Process mean shift detected: {mean:.4f}mm (target: {self.target_value:.4f}mm)",
+                'severity': 'warning',
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return alerts
+    
+    def generate_all_charts(self, df, measurements):
+        """Generate all visualization charts as base64 encoded images"""
+        charts = {}
+        
+        try:
+            # Set style for better looking plots
+            plt.style.use('seaborn-v0_8')
+            
+            # 1. Histogram (直方图)
+            charts['histogram'] = self.create_histogram(measurements)
+            
+            # 2. Box Plot (箱型图)
+            charts['boxplot'] = self.create_boxplot(measurements)
+            
+            # 3. Correlation Heatmap (热力图)
+            charts['heatmap'] = self.create_correlation_heatmap(df)
+            
+            # 4. X-bar Chart (X-bar图)
+            charts['xbar_chart'] = self.create_xbar_chart(measurements)
+            
+            # 5. R Chart (R图)
+            charts['r_chart'] = self.create_r_chart(measurements)
+            
+            # 6. Scatter Plot for Clustering (散点图)
+            charts['clustering_scatter'] = self.create_clustering_scatter(measurements)
+            
+            # 7. Time Series Plot (时间序列)
+            charts['time_series'] = self.create_time_series_plot(df)
+            
+        except Exception as e:
+            print(f"❌ Error generating charts: {e}")
+        
+        return charts
+    
+    def create_histogram(self, measurements):
+        """Create histogram chart"""
+        try:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.hist(measurements, bins=20, alpha=0.7, color='skyblue', edgecolor='black')
+            ax.axvline(self.target_value, color='red', linestyle='--', label=f'Target ({self.target_value})')
+            ax.axvline(self.usl, color='orange', linestyle='--', label=f'USL ({self.usl})')
+            ax.axvline(self.lsl, color='orange', linestyle='--', label=f'LSL ({self.lsl})')
+            ax.set_xlabel('Measurement Value (mm)')
+            ax.set_ylabel('Frequency')
+            ax.set_title('Measurement Distribution Histogram')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            return self.save_chart_to_oss(fig, 'histogram')
+        except Exception as e:
+            print(f"Error creating histogram: {e}")
+            return ""
+    
+    def create_boxplot(self, measurements):
+        """Create box plot chart"""
+        try:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            bp = ax.boxplot(measurements, patch_artist=True)
+            bp['boxes'][0].set_facecolor('lightblue')
+            
+            ax.axhline(self.target_value, color='red', linestyle='--', label=f'Target ({self.target_value})')
+            ax.axhline(self.usl, color='orange', linestyle='--', label=f'USL ({self.usl})')
+            ax.axhline(self.lsl, color='orange', linestyle='--', label=f'LSL ({self.lsl})')
+            ax.set_ylabel('Measurement Value (mm)')
+            ax.set_title('Measurement Distribution Box Plot')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            return self.save_chart_to_oss(fig, 'boxplot')
+        except Exception as e:
+            print(f"Error creating boxplot: {e}")
+            return ""
+    
+    def create_correlation_heatmap(self, df):
+        """Create correlation heatmap"""
+        try:
+            numeric_cols = ['int_value', 'float_value']
+            if len(df) < 3:
+                return ""
+            
+            fig, ax = plt.subplots(figsize=(8, 6))
+            correlation_matrix = df[numeric_cols].corr()
+            sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0, ax=ax)
+            ax.set_title('Correlation Heatmap')
+            
+            return self.save_chart_to_oss(fig, 'heatmap')
+        except Exception as e:
+            print(f"Error creating heatmap: {e}")
+            return ""
+    
+    def create_xbar_chart(self, measurements):
+        """Create X-bar control chart"""
+        try:
+            if len(measurements) < 10:
+                return ""
+            
+            subgroup_size = 5
+            subgroups = []
+            for i in range(0, len(measurements) - subgroup_size + 1, subgroup_size):
+                subgroups.append(measurements[i:i+subgroup_size])
+            
+            xbar_values = [np.mean(subgroup) for subgroup in subgroups]
+            r_values = [np.max(subgroup) - np.min(subgroup) for subgroup in subgroups]
+            
+            xbar_mean = np.mean(xbar_values)
+            r_mean = np.mean(r_values)
+            A2 = 0.577
+            
+            xbar_ucl = xbar_mean + A2 * r_mean
+            xbar_lcl = xbar_mean - A2 * r_mean
+            
+            fig, ax = plt.subplots(figsize=(12, 6))
+            x_points = range(len(xbar_values))
+            ax.plot(x_points, xbar_values, 'bo-', label='X-bar values')
+            ax.axhline(xbar_mean, color='green', linestyle='-', label=f'Mean ({xbar_mean:.4f})')
+            ax.axhline(xbar_ucl, color='red', linestyle='--', label=f'UCL ({xbar_ucl:.4f})')
+            ax.axhline(xbar_lcl, color='red', linestyle='--', label=f'LCL ({xbar_lcl:.4f})')
+            
+            ax.set_xlabel('Subgroup Number')
+            ax.set_ylabel('Subgroup Mean (mm)')
+            ax.set_title('X-bar Control Chart')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            return self.save_chart_to_oss(fig, 'xbar_chart')
+        except Exception as e:
+            print(f"Error creating X-bar chart: {e}")
+            return ""
+    
+    def create_r_chart(self, measurements):
+        """Create R control chart"""
+        try:
+            if len(measurements) < 10:
+                return ""
+            
+            subgroup_size = 5
+            subgroups = []
+            for i in range(0, len(measurements) - subgroup_size + 1, subgroup_size):
+                subgroups.append(measurements[i:i+subgroup_size])
+            
+            r_values = [np.max(subgroup) - np.min(subgroup) for subgroup in subgroups]
+            r_mean = np.mean(r_values)
+            
+            D3 = 0.0
+            D4 = 2.114
+            r_ucl = D4 * r_mean
+            r_lcl = D3 * r_mean
+            
+            fig, ax = plt.subplots(figsize=(12, 6))
+            x_points = range(len(r_values))
+            ax.plot(x_points, r_values, 'ro-', label='R values')
+            ax.axhline(r_mean, color='green', linestyle='-', label=f'Mean ({r_mean:.4f})')
+            ax.axhline(r_ucl, color='red', linestyle='--', label=f'UCL ({r_ucl:.4f})')
+            ax.axhline(r_lcl, color='red', linestyle='--', label=f'LCL ({r_lcl:.4f})')
+            
+            ax.set_xlabel('Subgroup Number')
+            ax.set_ylabel('Subgroup Range (mm)')
+            ax.set_title('R Control Chart')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            return self.save_chart_to_oss(fig, 'r_chart')
+        except Exception as e:
+            print(f"Error creating R chart: {e}")
+            return ""
+    
+    def create_clustering_scatter(self, measurements):
+        """Create clustering scatter plot"""
+        try:
+            if len(measurements) < 6:
+                return ""
+            
+            # Prepare data
+            data = measurements.reshape(-1, 1)
+            scaler = StandardScaler()
+            scaled_data = scaler.fit_transform(data)
+            
+            optimal_clusters = min(3, len(measurements) // 3)
+            if optimal_clusters < 2:
+                optimal_clusters = 2
+            
+            kmeans = KMeans(n_clusters=optimal_clusters, random_state=42, n_init=10)
+            cluster_labels = kmeans.fit_predict(scaled_data)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            colors = ['red', 'blue', 'green', 'orange', 'purple']
+            
+            for i in range(optimal_clusters):
+                cluster_data = measurements[cluster_labels == i]
+                y_values = np.ones(len(cluster_data)) * i  # Spread vertically by cluster
+                ax.scatter(cluster_data, y_values, c=colors[i % len(colors)], 
+                          label=f'Cluster {i+1}', alpha=0.7, s=50)
+            
+            ax.set_xlabel('Measurement Value (mm)')
+            ax.set_ylabel('Cluster')
+            ax.set_title('Clustering Analysis Scatter Plot')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            return self.save_chart_to_oss(fig, 'clustering_scatter')
+        except Exception as e:
+            print(f"Error creating clustering scatter: {e}")
+            return ""
+    
+    def create_time_series_plot(self, df):
+        """Create time series plot"""
+        try:
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+            
+            # Measurement values over time
+            ax1.plot(df.index, df['float_value'], 'b-', alpha=0.7, label='Measurements')
+            ax1.axhline(self.target_value, color='red', linestyle='--', label=f'Target ({self.target_value})')
+            ax1.axhline(self.usl, color='orange', linestyle='--', label=f'USL ({self.usl})')
+            ax1.axhline(self.lsl, color='orange', linestyle='--', label=f'LSL ({self.lsl})')
+            ax1.set_ylabel('Measurement Value (mm)')
+            ax1.set_title('Time Series - Measurement Values')
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+            
+            # Pass/Fail over time
+            ax2.plot(df.index, df['bool_value'].astype(int), 'go-', alpha=0.7, label='Pass/Fail')
+            ax2.set_ylabel('Pass (1) / Fail (0)')
+            ax2.set_xlabel('Sample Number')
+            ax2.set_title('Time Series - Pass/Fail Status')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+            ax2.set_ylim(-0.1, 1.1)
+            
+            plt.tight_layout()
+            return self.save_chart_to_oss(fig, 'time_series')
+        except Exception as e:
+            print(f"Error creating time series plot: {e}")
+            return ""
+    
+    def save_chart_to_oss(self, fig, chart_name):
+        """Save matplotlib figure as PNG file to OSS and return URL"""
+        try:
+            buffer = io.BytesIO()
+            fig.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            buffer.seek(0)
+            
+            # Generate OSS key for chart (latest version, no timestamp)
+            oss_key = f"charts/latest_{chart_name}.png"
+            
+            # Upload to OSS (overwrites previous version)
+            self.oss_bucket.put_object(oss_key, buffer.getvalue())
+            buffer.close()
+            plt.close(fig)  # Close figure to free memory
+            
+            # Return the OSS key (desktop app will construct full URL)
+            return oss_key
+        except Exception as e:
+            print(f"Error saving chart {chart_name} to OSS: {e}")
+            if fig:
+                plt.close(fig)
+            return ""
     
     def upload_analysis_results(self):
         """Upload analysis results to OSS"""

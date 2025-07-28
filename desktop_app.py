@@ -18,9 +18,9 @@ from datetime import datetime
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                              QWidget, QPushButton, QLabel, QTextEdit, QFileDialog, 
                              QTabWidget, QTableWidget, QTableWidgetItem, QProgressBar,
-                             QGroupBox, QGridLayout, QScrollArea, QMessageBox)
+                             QGroupBox, QGridLayout, QScrollArea, QMessageBox, QSplitter)
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
-from PyQt5.QtGui import QPixmap, QFont, QTextCursor
+from PyQt5.QtGui import QPixmap, QFont, QTextCursor, QPalette
 
 import oss2
 import paho.mqtt.client as mqtt
@@ -229,7 +229,10 @@ class DesktopApp(QMainWindow):
         # Tab 2: Real-time Data Monitor
         self.setup_data_monitor_tab()
         
-        # Tab 3: Analysis Results
+        # Tab 3: Statistical Analysis
+        self.setup_statistical_analysis_tab()
+        
+        # Tab 4: Analysis Results (Raw Data)
         self.setup_analysis_tab()
     
     def setup_file_processing_tab(self):
@@ -343,6 +346,94 @@ class DesktopApp(QMainWindow):
         layout.addWidget(stats_group)
         
         self.tab_widget.addTab(tab, "Real-time Data")
+    
+    def setup_statistical_analysis_tab(self):
+        """Setup comprehensive statistical analysis tab"""
+        tab = QWidget()
+        main_layout = QVBoxLayout(tab)
+        
+        # Create splitter for main sections
+        main_splitter = QSplitter(Qt.Vertical)
+        main_layout.addWidget(main_splitter)
+        
+        # Top section: Key metrics and alerts
+        metrics_widget = QWidget()
+        metrics_layout = QVBoxLayout(metrics_widget)
+        
+        # Key Metrics Panel
+        metrics_group = QGroupBox("📊 Key Process Metrics")
+        metrics_grid = QGridLayout(metrics_group)
+        
+        self.statistical_metrics = {
+            'Pass Rate': QLabel("--"),
+            'Cpk (Process Capability)': QLabel("--"),
+            'Mean Value': QLabel("--"),
+            'Std Deviation': QLabel("--"),
+            'Tolerance Utilization': QLabel("--"),
+            'Process Status': QLabel("--")
+        }
+        
+        for i, (label_text, value_label) in enumerate(self.statistical_metrics.items()):
+            label = QLabel(f"{label_text}:")
+            value_label.setStyleSheet("font-weight: bold; color: #2E86AB;")
+            metrics_grid.addWidget(label, i//3, (i%3)*2)
+            metrics_grid.addWidget(value_label, i//3, (i%3)*2+1)
+        
+        metrics_layout.addWidget(metrics_group)
+        
+        # Alerts Panel
+        alerts_group = QGroupBox("🚨 Quality Alerts")
+        alerts_layout = QVBoxLayout(alerts_group)
+        
+        self.alerts_text = QTextEdit()
+        self.alerts_text.setReadOnly(True)
+        self.alerts_text.setMaximumHeight(100)
+        self.alerts_text.setPlaceholderText("No quality alerts...")
+        alerts_layout.addWidget(self.alerts_text)
+        
+        metrics_layout.addWidget(alerts_group)
+        main_splitter.addWidget(metrics_widget)
+        
+        # Bottom section: Charts
+        charts_widget = QWidget()
+        charts_layout = QVBoxLayout(charts_widget)
+        
+        # Charts tabs
+        self.charts_tab_widget = QTabWidget()
+        
+        # Create chart display areas
+        self.chart_displays = {}
+        chart_types = [
+            ('histogram', '📊 Histogram'),
+            ('boxplot', '📦 Box Plot'),
+            ('heatmap', '🔥 Correlation Heatmap'),
+            ('xbar_chart', '📈 X-bar Chart'),
+            ('r_chart', '📉 R Chart'),
+            ('clustering_scatter', '🎯 Clustering'),
+            ('time_series', '⏰ Time Series')
+        ]
+        
+        for chart_key, chart_name in chart_types:
+            chart_tab = QWidget()
+            chart_layout = QVBoxLayout(chart_tab)
+            
+            chart_label = QLabel(f"Loading {chart_name.split(' ', 1)[1]}...")
+            chart_label.setAlignment(Qt.AlignCenter)
+            chart_label.setStyleSheet("border: 1px solid gray; min-height: 300px; min-width: 400px;")
+            chart_label.setScaledContents(False)
+            
+            chart_layout.addWidget(chart_label)
+            self.chart_displays[chart_key] = chart_label
+            
+            self.charts_tab_widget.addTab(chart_tab, chart_name)
+        
+        charts_layout.addWidget(self.charts_tab_widget)
+        main_splitter.addWidget(charts_widget)
+        
+        # Set splitter proportions
+        main_splitter.setSizes([200, 600])
+        
+        self.tab_widget.addTab(tab, "Statistical Analysis")
     
     def setup_analysis_tab(self):
         """Setup analysis results tab"""
@@ -462,11 +553,11 @@ class DesktopApp(QMainWindow):
     def update_analysis_display(self, analysis_data):
         """Update analysis results display"""
         try:
-            # Update analysis text
+            # Update raw analysis text (Tab 4)
             formatted_analysis = json.dumps(analysis_data, indent=2, ensure_ascii=False)
             self.analysis_text.setPlainText(formatted_analysis)
             
-            # Update statistics
+            # Update Real-time Data tab statistics (Tab 2)
             stats = analysis_data.get('statistics', {})
             if stats:
                 self.stats_labels["Total Points"].setText(str(stats.get('data_points', '--')))
@@ -482,6 +573,132 @@ class DesktopApp(QMainWindow):
                 self.stats_labels["Last Update"].setText(
                     analysis_data.get('last_analysis', '--')[:19] if analysis_data.get('last_analysis') else '--'
                 )
+            
+            # Update Statistical Analysis tab (Tab 3) - only if it exists
+            if hasattr(self, 'statistical_metrics'):
+                self.update_statistical_metrics(analysis_data)
+                self.update_quality_alerts(analysis_data)
+                self.update_charts_display(analysis_data)
+        
+        except Exception as e:
+            pass
+    
+    def update_statistical_metrics(self, analysis_data):
+        """Update statistical metrics display"""
+        try:
+            # Pass Rate
+            pass_rate_analysis = analysis_data.get('pass_rate_analysis', {})
+            pass_rate = pass_rate_analysis.get('pass_rate', 0)
+            self.statistical_metrics['Pass Rate'].setText(f"{pass_rate:.1f}%")
+            
+            # Process Capability (Cpk)
+            process_capability = analysis_data.get('process_capability', {})
+            cpk = process_capability.get('cpk', 0)
+            self.statistical_metrics['Cpk (Process Capability)'].setText(f"{cpk:.3f}")
+            
+            # Mean Value
+            descriptive_stats = analysis_data.get('descriptive_statistics', {})
+            mean_val = descriptive_stats.get('mean', 0)
+            self.statistical_metrics['Mean Value'].setText(f"{mean_val:.4f} mm")
+            
+            # Standard Deviation
+            std_val = descriptive_stats.get('std', 0)
+            self.statistical_metrics['Std Deviation'].setText(f"{std_val:.4f} mm")
+            
+            # Tolerance Utilization
+            tolerance_util = analysis_data.get('tolerance_utilization', {})
+            util_pct = tolerance_util.get('utilization_percentage', 0)
+            self.statistical_metrics['Tolerance Utilization'].setText(f"{util_pct:.1f}%")
+            
+            # Process Status (based on capability)
+            capability_assessment = process_capability.get('capability_assessment', 'Unknown')
+            status_color = self.get_status_color(capability_assessment)
+            self.statistical_metrics['Process Status'].setText(capability_assessment)
+            self.statistical_metrics['Process Status'].setStyleSheet(f"font-weight: bold; color: {status_color};")
+            
+        except Exception as e:
+            pass
+    
+    def get_status_color(self, capability_assessment):
+        """Get color based on process capability assessment"""
+        if 'Excellent' in capability_assessment:
+            return '#28a745'  # Green
+        elif 'Good' in capability_assessment:
+            return '#17a2b8'  # Blue
+        elif 'Adequate' in capability_assessment:
+            return '#ffc107'  # Yellow
+        elif 'Poor' in capability_assessment:
+            return '#fd7e14'  # Orange
+        else:
+            return '#dc3545'  # Red
+    
+    def update_quality_alerts(self, analysis_data):
+        """Update quality alerts display"""
+        try:
+            alerts = analysis_data.get('alerts', [])
+            if not alerts:
+                self.alerts_text.setPlainText("✅ No quality alerts - Process is running within specifications")
+                self.alerts_text.setStyleSheet("color: #28a745;")  # Green
+            else:
+                alert_text = ""
+                for alert in alerts:
+                    severity = alert.get('severity', 'info')
+                    icon = '🚨' if severity == 'critical' else '⚠️' if severity == 'warning' else 'ℹ️'
+                    alert_text += f"{icon} {alert.get('message', 'Unknown alert')}\n"
+                
+                self.alerts_text.setPlainText(alert_text.strip())
+                self.alerts_text.setStyleSheet("color: #dc3545;")  # Red
+        
+        except Exception as e:
+            pass
+    
+    def update_charts_display(self, analysis_data):
+        """Update charts display from latest OSS chart images"""
+        try:
+            charts = analysis_data.get('charts', {})
+            
+            for chart_key, chart_label in self.chart_displays.items():
+                oss_key = charts.get(chart_key)
+                
+                # Fallback to expected latest filename if not provided in analysis data
+                if not oss_key:
+                    oss_key = f"charts/latest_{chart_key}.png"
+                
+                if oss_key:
+                    # Download latest chart image from OSS and display
+                    try:
+                        obj = self.oss_bucket.get_object(oss_key)
+                        image_data = obj.read()
+                        
+                        pixmap = QPixmap()
+                        if pixmap.loadFromData(image_data):
+                            # Scale to fit while maintaining aspect ratio
+                            scaled_pixmap = pixmap.scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                            chart_label.setPixmap(scaled_pixmap)
+                            chart_label.setText("")  # Clear loading text
+                        else:
+                            chart_label.setText(f"Failed to load {chart_key} chart")
+                    except Exception as download_error:
+                        # Try fallback filename if the provided key failed
+                        if not oss_key.startswith("charts/latest_"):
+                            fallback_key = f"charts/latest_{chart_key}.png"
+                            try:
+                                obj = self.oss_bucket.get_object(fallback_key)
+                                image_data = obj.read()
+                                
+                                pixmap = QPixmap()
+                                if pixmap.loadFromData(image_data):
+                                    scaled_pixmap = pixmap.scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                                    chart_label.setPixmap(scaled_pixmap)
+                                    chart_label.setText("")
+                                else:
+                                    chart_label.setText(f"Failed to load {chart_key} chart")
+                            except:
+                                chart_label.setText(f"No {chart_key} chart available")
+                        else:
+                            chart_label.setText(f"Chart {chart_key} not found: {download_error}")
+                else:
+                    chart_label.setText(f"No {chart_key} data available")
         
         except Exception as e:
             pass
