@@ -20,15 +20,15 @@ int currentMeasurementIndex = 0;
 // Button configuration
 int btnGPIO = 0;           // Boot button for array data re-fetch
 int btnState = false;
-int compareBtnGPIO = 42;   // Comparison button connected to 3.3V
+int compareBtnGPIO = 39;   // Comparison button connected to 3.3V
 int compareBtnState = false;
 int lastCompareBtnState = false;
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;  // 50ms debounce delay
 
 // Dual-color LED configuration (Red/Green LED)
-int ledCommonGPIO = 4;     // Common pin (connect to VCC for common anode)
-int ledControlGPIO = 5;    // Control pin (LOW=Red, HIGH=Green)
+int ledCommonGPIO = 7;     // Common pin (connect to VCC for common anode)
+int ledControlGPIO = 45;    // Control pin (LOW=Red, HIGH=Green)
 
 // LED states
 enum LEDState {
