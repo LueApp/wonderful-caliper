@@ -35,6 +35,14 @@ from sklearn.preprocessing import StandardScaler
 import warnings
 warnings.filterwarnings('ignore')
 
+# LLM integration for analysis insights
+try:
+    import anthropic
+    CLAUDE_AVAILABLE = True
+except ImportError:
+    CLAUDE_AVAILABLE = False
+    print("⚠️ anthropic package not installed. Run: pip install anthropic")
+
 # Add parent directory to path to import config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import get_config
@@ -75,6 +83,33 @@ class DataProcessingService:
         # Timing
         self.last_upload = time.time()
         self.upload_interval = 10  # seconds
+        
+        # Claude API for insights generation
+        self.claude_client = None
+        if CLAUDE_AVAILABLE:
+            try:
+                # Configure for proxy if needed
+                import httpx
+                
+                # Option 1: Use without proxy (try first)
+                try:
+                    self.claude_client = anthropic.Anthropic()
+                    print("✅ Claude API initialized for insights generation")
+                except Exception as proxy_error:
+                    print(f"⚠️ Direct connection failed: {proxy_error}")
+                    
+                    # Option 2: Configure custom HTTP client without proxy
+                    print("🔄 Trying without proxy...")
+                    http_client = httpx.Client(proxies={})
+                    self.claude_client = anthropic.Anthropic(http_client=http_client)
+                    print("✅ Claude API initialized (no proxy)")
+                    
+            except Exception as e:
+                print(f"⚠️ Claude API initialization failed: {e}")
+                print("💡 Solutions:")
+                print("   1. Install SOCKS support: pip install httpx[socks]")
+                print("   2. Set API key: export ANTHROPIC_API_KEY='your-key'")
+                print("   3. Check network/proxy settings")
         
         # Threading
         self.running = True
@@ -252,9 +287,10 @@ class DataProcessingService:
                 charts = self.generate_all_charts(df, measurements)
                 
                 # Update analysis results
-                self.analysis_results = {
+                # Generate AI insights first (needs all the analysis data)
+                temp_results = {
                     'last_analysis': datetime.now().isoformat(),
-                    'data_count': len(self.historical_data),
+                    'data_count': len(df),
                     'descriptive_statistics': descriptive_stats,
                     'deviation_analysis': deviation_analysis,
                     'pass_rate_analysis': pass_rate_analysis,
@@ -267,6 +303,13 @@ class DataProcessingService:
                     'charts': charts,
                     'alerts': self.generate_quality_alerts(measurements, pass_fail)
                 }
+                
+                # Generate AI insights based on analysis results
+                ai_insights = self.generate_ai_insights(temp_results)
+                
+                # Final analysis results including AI insights
+                self.analysis_results = temp_results
+                self.analysis_results['ai_insights'] = ai_insights
                 
                 # Print brief status
                 if len(df) % 5 == 0:  # Print every 5th analysis
@@ -871,6 +914,90 @@ class DataProcessingService:
                 plt.close(fig)
             return ""
     
+    def generate_ai_insights(self, analysis_data):
+        """Generate AI-powered insights using Claude API for part length measurement"""
+        if not self.claude_client:
+            return "AI insights unavailable - Claude API not configured"
+        
+        try:
+            # Extract key metrics for analysis
+            pass_rate_data = analysis_data.get('pass_rate_analysis', {})
+            pass_rate = pass_rate_data.get('pass_rate', 0)
+            fail_count = pass_rate_data.get('fail_count', 0)
+            
+            capability_data = analysis_data.get('process_capability', {})
+            cpk = capability_data.get('cpk', 0)
+            cp = capability_data.get('cp', 0)
+            capability_assessment = capability_data.get('capability_assessment', 'Unknown')
+            
+            desc_stats = analysis_data.get('descriptive_statistics', {})
+            mean_val = desc_stats.get('mean', 0)
+            std_val = desc_stats.get('std', 0)
+            
+            tolerance_util = analysis_data.get('tolerance_utilization', {})
+            utilization_pct = tolerance_util.get('utilization_percentage', 0)
+            
+            time_series = analysis_data.get('time_series_analysis', {})
+            process_stability = time_series.get('process_stability', 'Unknown')
+            
+            alerts = analysis_data.get('alerts', [])
+            data_count = analysis_data.get('data_count', 0)
+            
+            # Build comprehensive prompt for part length measurement
+            prompt = f"""
+As a manufacturing quality control expert specializing in precision part measurement, analyze this length measurement data from our production line:
+
+🏭 PRODUCTION CONTEXT:
+• Measuring: Part length dimensions using capacitive displacement sensor (TM003)
+• Production Process: Manufacturing parts with precise length requirements
+• Measurement System: ESP32-based real-time dimensional inspection
+• Critical Quality Parameter: Part length must meet tight tolerances
+
+📊 CURRENT MEASUREMENT DATA:
+• Pass Rate: {pass_rate:.1f}% ({fail_count} out-of-spec parts from {data_count} measurements)
+• Process Capability (Cpk): {cpk:.3f} | Overall Capability (Cp): {cp:.3f}
+• Capability Assessment: {capability_assessment}
+• Measured Length Mean: {mean_val:.4f}mm (Target: {self.target_value:.4f}mm)
+• Length Variation (Std Dev): {std_val:.4f}mm
+• Tolerance Utilization: {utilization_pct:.1f}%
+• Process Stability: {process_stability}
+• Quality Alerts: {len(alerts)} active
+
+🎯 LENGTH SPECIFICATIONS:
+• Target Length: {self.target_value:.4f}mm
+• Tolerance Band: ±{self.tolerance:.3f}mm
+• Upper Spec Limit (USL): {self.usl:.4f}mm
+• Lower Spec Limit (LSL): {self.lsl:.4f}mm
+
+Please provide manufacturing-focused insights covering:
+
+1. **Part Quality Status** - Are parts meeting length requirements?
+2. **Production Impact** - How does this affect part functionality and assembly?
+3. **Process Adjustments** - Specific machine/tooling recommendations for length control
+4. **Quality Actions** - Immediate steps for operators and quality personnel
+5. **Root Cause Areas** - Potential sources of length variation to investigate
+
+Focus on practical guidance for manufacturing operators, quality engineers, and production supervisors dealing with part length measurement and control.
+"""
+
+            # Call Claude API
+            response = self.claude_client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=600,
+                temperature=0.3,
+                messages=[
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ]
+            )
+            
+            return response.content[0].text
+            
+        except Exception as e:
+            return f"AI insights generation failed: {str(e)}"
+    
     def upload_analysis_results(self):
         """Upload analysis results to OSS"""
         try:
@@ -890,8 +1017,7 @@ class DataProcessingService:
             data_json = json.dumps(self.historical_data, indent=2, default=str, ensure_ascii=False)
             self.oss_bucket.put_object(data_file, data_json)
             
-            stats = self.analysis_results.get('statistics', {})
-            data_count = stats.get('data_points', 0)
+            data_count = self.analysis_results.get('data_count', 0)
             alert_count = len(self.analysis_results.get('alerts', []))
             
             print(f"✅ Analysis uploaded: {data_count} points, {alert_count} alerts → {latest_analysis_file}")

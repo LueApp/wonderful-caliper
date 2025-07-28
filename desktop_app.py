@@ -352,13 +352,13 @@ class DesktopApp(QMainWindow):
         tab = QWidget()
         main_layout = QVBoxLayout(tab)
         
-        # Create splitter for main sections
-        main_splitter = QSplitter(Qt.Vertical)
+        # Create horizontal splitter for left (metrics/alerts) and right (AI insights) sections
+        main_splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(main_splitter)
         
-        # Top section: Key metrics and alerts
-        metrics_widget = QWidget()
-        metrics_layout = QVBoxLayout(metrics_widget)
+        # Left section: Key metrics and alerts
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
         
         # Key Metrics Panel
         metrics_group = QGroupBox("📊 Key Process Metrics")
@@ -379,7 +379,7 @@ class DesktopApp(QMainWindow):
             metrics_grid.addWidget(label, i//3, (i%3)*2)
             metrics_grid.addWidget(value_label, i//3, (i%3)*2+1)
         
-        metrics_layout.addWidget(metrics_group)
+        left_layout.addWidget(metrics_group)
         
         # Alerts Panel
         alerts_group = QGroupBox("🚨 Quality Alerts")
@@ -391,8 +391,35 @@ class DesktopApp(QMainWindow):
         self.alerts_text.setPlaceholderText("No quality alerts...")
         alerts_layout.addWidget(self.alerts_text)
         
-        metrics_layout.addWidget(alerts_group)
-        main_splitter.addWidget(metrics_widget)
+        left_layout.addWidget(alerts_group)
+        
+        # Add left widget to splitter
+        main_splitter.addWidget(left_widget)
+        
+        # Right section: AI Insights Panel (takes right side of splitter)
+        ai_insights_group = QGroupBox("🤖 AI Quality Insights")
+        ai_insights_layout = QVBoxLayout(ai_insights_group)
+        
+        # AI Insights text area (larger on right side)
+        self.ai_insights_text = QTextEdit()
+        self.ai_insights_text.setReadOnly(True)
+        self.ai_insights_text.setMinimumHeight(200)
+        self.ai_insights_text.setPlaceholderText("AI insights will appear here... Click 'Full Screen' for detailed view")
+        self.ai_insights_text.setStyleSheet("background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; font-size: 10pt;")
+        ai_insights_layout.addWidget(self.ai_insights_text)
+        
+        # Full screen button
+        self.fullscreen_insights_btn = QPushButton("🔍 View AI Insights Full Screen")
+        self.fullscreen_insights_btn.setStyleSheet("background-color: #007bff; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
+        self.fullscreen_insights_btn.clicked.connect(self.show_fullscreen_insights)
+        ai_insights_layout.addWidget(self.fullscreen_insights_btn)
+        
+        # Full screen AI insights window (initially hidden)
+        self.fullscreen_insights_window = None
+        self.current_ai_insights = ""
+        
+        # Add AI insights as right widget to splitter
+        main_splitter.addWidget(ai_insights_group)
         
         # Bottom section: Charts
         charts_widget = QWidget()
@@ -428,10 +455,17 @@ class DesktopApp(QMainWindow):
             self.charts_tab_widget.addTab(chart_tab, chart_name)
         
         charts_layout.addWidget(self.charts_tab_widget)
-        main_splitter.addWidget(charts_widget)
+        # Create vertical splitter for top (metrics/AI) and bottom (charts)
+        vertical_splitter = QSplitter(Qt.Vertical)
+        vertical_splitter.addWidget(main_splitter)
+        vertical_splitter.addWidget(charts_widget)
         
         # Set splitter proportions
-        main_splitter.setSizes([200, 600])
+        main_splitter.setSizes([400, 300])  # Left metrics vs right AI insights
+        vertical_splitter.setSizes([300, 500])  # Top info vs bottom charts
+        
+        # Update main layout to use vertical splitter
+        main_layout.addWidget(vertical_splitter)
         
         self.tab_widget.addTab(tab, "Statistical Analysis")
     
@@ -578,6 +612,7 @@ class DesktopApp(QMainWindow):
             if hasattr(self, 'statistical_metrics'):
                 self.update_statistical_metrics(analysis_data)
                 self.update_quality_alerts(analysis_data)
+                self.update_ai_insights(analysis_data)
                 self.update_charts_display(analysis_data)
         
         except Exception as e:
@@ -651,6 +686,92 @@ class DesktopApp(QMainWindow):
         
         except Exception as e:
             pass
+    
+    def update_ai_insights(self, analysis_data):
+        """Update AI insights display"""
+        try:
+            ai_insights = analysis_data.get('ai_insights', '')
+            self.current_ai_insights = ai_insights  # Store for full-screen display
+            
+            if ai_insights:
+                if ai_insights.startswith('AI insights unavailable') or ai_insights.startswith('AI insights generation failed'):
+                    # Show preview in small area
+                    preview = f"⚠️ {ai_insights[:200]}..." if len(ai_insights) > 200 else f"⚠️ {ai_insights}"
+                    self.ai_insights_text.setPlainText(preview)
+                    self.ai_insights_text.setStyleSheet("background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 8px; color: #856404;")
+                else:
+                    # Show preview in small area
+                    preview = ai_insights[:300] + "..." if len(ai_insights) > 300 else ai_insights
+                    self.ai_insights_text.setPlainText(preview)
+                    self.ai_insights_text.setStyleSheet("background-color: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 8px; color: #0c5460;")
+                
+                # Enable full-screen button
+                self.fullscreen_insights_btn.setEnabled(True)
+                self.fullscreen_insights_btn.setText("🔍 View AI Insights Full Screen")
+                
+                # Update full-screen window if it's open
+                if self.fullscreen_insights_window and hasattr(self, 'fullscreen_insights_text'):
+                    self.fullscreen_insights_text.setPlainText(ai_insights)
+            else:
+                self.ai_insights_text.setPlainText("🔄 Generating AI insights...")
+                self.ai_insights_text.setStyleSheet("background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; color: #6c757d;")
+                self.fullscreen_insights_btn.setEnabled(False)
+                self.fullscreen_insights_btn.setText("⏳ Waiting for AI insights...")
+        
+        except Exception as e:
+            self.ai_insights_text.setPlainText(f"❌ Error displaying AI insights: {e}")
+            self.ai_insights_text.setStyleSheet("background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 8px; color: #721c24;")
+    
+    def show_fullscreen_insights(self):
+        """Show AI insights in a full-screen window"""
+        if not self.current_ai_insights:
+            QMessageBox.information(self, "AI Insights", "No AI insights available yet. Please wait for analysis data.")
+            return
+        
+        # Create or update full-screen window
+        if not self.fullscreen_insights_window:
+            self.fullscreen_insights_window = QMainWindow()
+            self.fullscreen_insights_window.setWindowTitle("🤖 AI Quality Insights - Full Screen")
+            self.fullscreen_insights_window.setWindowState(Qt.WindowMaximized)
+            
+            # Create central widget
+            central_widget = QWidget()
+            self.fullscreen_insights_window.setCentralWidget(central_widget)
+            layout = QVBoxLayout(central_widget)
+            
+            # Header
+            header_label = QLabel("🤖 AI-Powered Manufacturing Quality Analysis")
+            header_label.setAlignment(Qt.AlignCenter)
+            header_label.setStyleSheet("font-size: 18pt; font-weight: bold; color: #2c3e50; padding: 15px; background-color: #ecf0f1; border-radius: 8px; margin-bottom: 10px;")
+            layout.addWidget(header_label)
+            
+            # Full AI insights text area
+            self.fullscreen_insights_text = QTextEdit()
+            self.fullscreen_insights_text.setReadOnly(True)
+            self.fullscreen_insights_text.setStyleSheet("""
+                QTextEdit {
+                    font-size: 12pt;
+                    line-height: 1.5;
+                    padding: 20px;
+                    background-color: #ffffff;
+                    color: #2c3e50;
+                    border: 2px solid #3498db;
+                    border-radius: 8px;
+                }
+            """)
+            layout.addWidget(self.fullscreen_insights_text)
+            
+            # Close button
+            close_btn = QPushButton("❌ Close Full Screen")
+            close_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 12px; font-size: 12pt; font-weight: bold; border-radius: 6px;")
+            close_btn.clicked.connect(self.fullscreen_insights_window.hide)
+            layout.addWidget(close_btn)
+        
+        # Update content and show
+        self.fullscreen_insights_text.setPlainText(self.current_ai_insights)
+        self.fullscreen_insights_window.show()
+        self.fullscreen_insights_window.raise_()
+        self.fullscreen_insights_window.activateWindow()
     
     def update_charts_display(self, analysis_data):
         """Update charts display from latest OSS chart images"""

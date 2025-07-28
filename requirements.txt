@@ -20,6 +20,7 @@ matplotlib>=3.7.0              # Plotting and visualization library
 seaborn>=0.12.0                # Statistical data visualization
 scipy>=1.11.0                  # Scientific computing and statistics
 scikit-learn>=1.3.0            # Machine learning and data mining
+anthropic>=0.8.0               # Claude API for AI-powered analysis insights
 
 # Quality Control & Process Capability
 # All statistical process control features are provided by scipy and numpy
