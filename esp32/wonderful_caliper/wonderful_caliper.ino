@@ -2,6 +2,9 @@
 #include "oss_client.hpp"
 #include "tm003_sensor.hpp"
 #include "oled_display.hpp"
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 // Array data storage
 double arrayData[ARRAY_ROWS][MAX_ARRAY_COLS];
@@ -41,6 +44,21 @@ float lastMeasuredValue = 0.0;
 float lastTargetValue = 0.0;
 int lastMeasurementIndex = -1;
 
+// MQTT configuration (from config.py ESP32 section)
+WiFiClientSecure wifiClientSecure;
+PubSubClient mqttClient(wifiClientSecure);
+
+// MQTT connection parameters
+const char* mqtt_server = "c1f20f9b.ala.cn-hangzhou.emqxsl.cn";
+const int mqtt_port = 8883;
+const char* mqtt_user = "esp32_device";
+const char* mqtt_password = "esp32_secure_pass_2024";
+const char* mqtt_topic = "devices/esp32-001/data";
+
+bool mqttConnected = false;
+unsigned long lastMqttReconnectAttempt = 0;
+String device_id = "esp32_caliper_001";
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -57,6 +75,12 @@ void setup() {
   
   // Initialize WiFi
   wifi_init();
+  
+  // Initialize MQTT after WiFi is connected
+  if (WiFi.status() == WL_CONNECTED) {
+    setupMQTT();
+    connectMQTT();
+  }
   
   // Fetch array data from OSS after WiFi is connected
   if (WiFi.status() == WL_CONNECTED) {
@@ -130,6 +154,74 @@ void setLED(LEDState state) {
   }
 }
 
+// MQTT connection and publishing functions
+void setupMQTT() {
+  wifiClientSecure.setInsecure(); // Skip certificate verification for simplicity
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  
+  Serial.println("[MQTT] MQTT client configured");
+  Serial.printf("[MQTT] Server: %s:%d\n", mqtt_server, mqtt_port);
+  Serial.printf("[MQTT] User: %s\n", mqtt_user);
+  Serial.printf("[MQTT] Topic: %s\n", mqtt_topic);
+}
+
+bool connectMQTT() {
+  if (mqttClient.connected()) {
+    return true;
+  }
+  
+  // Attempt to connect
+  Serial.println("[MQTT] Attempting MQTT connection...");
+  
+  String clientId = device_id + "_" + String(random(0xffff), HEX);
+  
+  if (mqttClient.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
+    mqttConnected = true;
+    Serial.println("[MQTT] ✅ Connected to MQTT broker");
+    return true;
+  } else {
+    mqttConnected = false;
+    Serial.printf("[MQTT] ❌ Connection failed, rc=%d\n", mqttClient.state());
+    return false;
+  }
+}
+
+void publishComparisonResult(int index, float measured, float target, bool success) {
+  if (!mqttConnected || !mqttClient.connected()) {
+    if (!connectMQTT()) {
+      Serial.println("[MQTT] ❌ Cannot publish - MQTT not connected");
+      return;
+    }
+  }
+  
+  // Create JSON data packet matching the format from esp32_simulator.py
+  DynamicJsonDocument doc(256);
+  doc["device_id"] = device_id;
+  doc["timestamp"] = millis(); // Use millis() as timestamp
+  doc["int_value"] = index + 1; // Index (1-8, so add 1 to currentMeasurementIndex)
+  doc["float_value"] = measured; // Measured displacement
+  doc["bool_value"] = success; // Success status
+  
+  // Add additional caliper-specific data
+  doc["target_value"] = target;
+  doc["difference"] = measured - target;
+  doc["tolerance"] = 0.05; // Our tolerance value
+  
+  String jsonString;
+  serializeJson(doc, jsonString);
+  
+  // Publish to MQTT topic
+  bool published = mqttClient.publish(mqtt_topic, jsonString.c_str(), true); // retained = true
+  
+  if (published) {
+    String status = success ? "✅ PASS" : "❌ FAIL";
+    Serial.printf("[MQTT] 📤 Published P%d: %.2f mm - %s\n", index + 1, measured, status.c_str());
+    Serial.printf("[MQTT] JSON: %s\n", jsonString.c_str());
+  } else {
+    Serial.println("[MQTT] ❌ Failed to publish message");
+  }
+}
+
 // Function to perform comparison between measured and target values
 void performComparison() {
   // Only perform comparison if we're in an active measurement sequence
@@ -169,6 +261,9 @@ void performComparison() {
   
   // Display comparison result on OLED
   oled_display_comparison_result(measured, target, difference, within_tolerance);
+  
+  // Publish comparison result via MQTT
+  publishComparisonResult(currentMeasurementIndex, measured, target, within_tolerance);
   
   // Wait briefly to show the result
   delay(500); // Show result for 0.5 seconds
@@ -231,6 +326,18 @@ void loop() {
   }
   
   lastCompareBtnState = reading;
+  
+  // Maintain MQTT connection
+  if (WiFi.status() == WL_CONNECTED && !mqttClient.connected()) {
+    unsigned long now = millis();
+    if (now - lastMqttReconnectAttempt > 5000) { // Try reconnect every 5 seconds
+      lastMqttReconnectAttempt = now;
+      if (connectMQTT()) {
+        lastMqttReconnectAttempt = 0;
+      }
+    }
+  }
+  mqttClient.loop(); // Process MQTT messages
   
   // Read TM003 sensor measurements
   if (millis() - lastSensorRead > 125) {  // 8 Hz rate (125ms interval)
