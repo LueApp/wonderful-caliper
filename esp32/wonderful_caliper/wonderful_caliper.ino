@@ -205,7 +205,7 @@ void publishComparisonResult(int index, float measured, float target, bool succe
   // Add additional caliper-specific data
   doc["target_value"] = target;
   doc["difference"] = measured - target;
-  doc["tolerance"] = 0.05; // Our tolerance value
+  doc["tolerance"] = 0.5; // Our tolerance value
   
   String jsonString;
   serializeJson(doc, jsonString);
@@ -239,7 +239,7 @@ void performComparison() {
   float measured = sensorData.displacement_mm;
   float target = arrayData[0][currentMeasurementIndex];
   float difference = measured - target;
-  float tolerance = 0.05; // 0.05mm tolerance
+  float tolerance = 0.5; // 0.05mm tolerance
   
   // Store comparison data
   lastMeasuredValue = measured;
