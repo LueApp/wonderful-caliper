@@ -420,15 +420,15 @@ class DataProcessingService:
     def assess_capability(self, cpk):
         """Assess process capability based on CPK value"""
         if cpk >= 2.0:
-            return "Excellent"
+            return "优秀"
         elif cpk >= 1.67:
-            return "Good"
+            return "良好"
         elif cpk >= 1.33:
-            return "Adequate"
+            return "充分"
         elif cpk >= 1.0:
-            return "Marginal"
+            return "临界"
         else:
-            return "Poor"
+            return "不足"
     
     def calculate_tolerance_utilization(self, measurements):
         """5. 公差利用率 (Tolerance Utilization)"""
@@ -943,41 +943,41 @@ class DataProcessingService:
             alerts = analysis_data.get('alerts', [])
             data_count = analysis_data.get('data_count', 0)
             
-            # Build comprehensive prompt for part length measurement
+            # Build comprehensive prompt for part length measurement (Chinese output)
             prompt = f"""
-As a manufacturing quality control expert specializing in precision part measurement, analyze this length measurement data from our production line:
+作为专业的制造质量控制专家，请分析我们生产线上的零件长度测量数据：
 
-🏭 PRODUCTION CONTEXT:
-• Measuring: Part length dimensions using capacitive displacement sensor (TM003)
-• Production Process: Manufacturing parts with precise length requirements
-• Measurement System: ESP32-based real-time dimensional inspection
-• Critical Quality Parameter: Part length must meet tight tolerances
+🏭 生产背景：
+• 测量对象：使用电容式位移传感器(TM003)测量零件长度尺寸
+• 生产工艺：制造精密长度要求的零件
+• 测量系统：基于ESP32的实时尺寸检测
+• 关键质量参数：零件长度必须满足严格公差要求
 
-📊 CURRENT MEASUREMENT DATA:
-• Pass Rate: {pass_rate:.1f}% ({fail_count} out-of-spec parts from {data_count} measurements)
-• Process Capability (Cpk): {cpk:.3f} | Overall Capability (Cp): {cp:.3f}
-• Capability Assessment: {capability_assessment}
-• Measured Length Mean: {mean_val:.4f}mm (Target: {self.target_value:.4f}mm)
-• Length Variation (Std Dev): {std_val:.4f}mm
-• Tolerance Utilization: {utilization_pct:.1f}%
-• Process Stability: {process_stability}
-• Quality Alerts: {len(alerts)} active
+📊 当前测量数据：
+• 合格率：{pass_rate:.1f}% (共{data_count}次测量中有{fail_count}个超差零件)
+• 过程能力指数(Cpk)：{cpk:.3f} | 总体能力指数(Cp)：{cp:.3f}
+• 能力评估：{capability_assessment}
+• 测量长度均值：{mean_val:.4f}mm (目标值：{self.target_value:.4f}mm)
+• 长度变异(标准差)：{std_val:.4f}mm
+• 公差利用率：{utilization_pct:.1f}%
+• 过程稳定性：{process_stability}
+• 质量警报：{len(alerts)}个活跃
 
-🎯 LENGTH SPECIFICATIONS:
-• Target Length: {self.target_value:.4f}mm
-• Tolerance Band: ±{self.tolerance:.3f}mm
-• Upper Spec Limit (USL): {self.usl:.4f}mm
-• Lower Spec Limit (LSL): {self.lsl:.4f}mm
+🎯 长度规格要求：
+• 目标长度：{self.target_value:.4f}mm
+• 公差带：±{self.tolerance:.3f}mm
+• 上限规格(USL)：{self.usl:.4f}mm
+• 下限规格(LSL)：{self.lsl:.4f}mm
 
-Please provide manufacturing-focused insights covering:
+请提供制造业导向的分析建议，包括：
 
-1. **Part Quality Status** - Are parts meeting length requirements?
-2. **Production Impact** - How does this affect part functionality and assembly?
-3. **Process Adjustments** - Specific machine/tooling recommendations for length control
-4. **Quality Actions** - Immediate steps for operators and quality personnel
-5. **Root Cause Areas** - Potential sources of length variation to investigate
+1. **零件质量状态** - 零件是否满足长度要求？
+2. **生产影响** - 这对零件功能和装配有何影响？
+3. **工艺调整** - 针对长度控制的具体机床/工装建议
+4. **质量措施** - 操作员和质量人员的即时行动步骤
+5. **根因分析** - 可能导致长度变异的潜在原因
 
-Focus on practical guidance for manufacturing operators, quality engineers, and production supervisors dealing with part length measurement and control.
+请重点关注为制造操作员、质量工程师和生产主管提供零件长度测量与控制的实用指导。请用中文回答。
 """
 
             # Call Claude API

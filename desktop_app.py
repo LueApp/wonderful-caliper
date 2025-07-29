@@ -223,16 +223,16 @@ class DesktopApp(QMainWindow):
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
         
-        # Tab 1: File Processing
+        # Tab 1: 文件处理
         self.setup_file_processing_tab()
         
-        # Tab 2: Real-time Data Monitor
+        # Tab 2: 实时数据监控
         self.setup_data_monitor_tab()
         
-        # Tab 3: Statistical Analysis
+        # Tab 3: 统计分析
         self.setup_statistical_analysis_tab()
         
-        # Tab 4: Analysis Results (Raw Data)
+        # Tab 4: 分析结果(原始数据)
         self.setup_analysis_tab()
     
     def setup_file_processing_tab(self):
@@ -309,7 +309,7 @@ class DesktopApp(QMainWindow):
         
         layout.addWidget(results_group)
         
-        self.tab_widget.addTab(tab, "File Processing")
+        self.tab_widget.addTab(tab, "文件处理")
     
     def setup_data_monitor_tab(self):
         """Setup real-time data monitoring tab"""
@@ -345,7 +345,7 @@ class DesktopApp(QMainWindow):
         
         layout.addWidget(stats_group)
         
-        self.tab_widget.addTab(tab, "Real-time Data")
+        self.tab_widget.addTab(tab, "实时数据")
     
     def setup_statistical_analysis_tab(self):
         """Setup comprehensive statistical analysis tab"""
@@ -360,17 +360,17 @@ class DesktopApp(QMainWindow):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         
-        # Key Metrics Panel
-        metrics_group = QGroupBox("📊 Key Process Metrics")
+        # 关键指标面板
+        metrics_group = QGroupBox("📊 关键过程指标")
         metrics_grid = QGridLayout(metrics_group)
         
         self.statistical_metrics = {
-            'Pass Rate': QLabel("--"),
-            'Cpk (Process Capability)': QLabel("--"),
-            'Mean Value': QLabel("--"),
-            'Std Deviation': QLabel("--"),
-            'Tolerance Utilization': QLabel("--"),
-            'Process Status': QLabel("--")
+            '合格率': QLabel("--"),
+            'Cpk (过程能力)': QLabel("--"),
+            '平均值': QLabel("--"),
+            '标准差': QLabel("--"),
+            '公差利用率': QLabel("--"),
+            '过程状态': QLabel("--")
         }
         
         for i, (label_text, value_label) in enumerate(self.statistical_metrics.items()):
@@ -381,14 +381,14 @@ class DesktopApp(QMainWindow):
         
         left_layout.addWidget(metrics_group)
         
-        # Alerts Panel
-        alerts_group = QGroupBox("🚨 Quality Alerts")
+        # 质量警报面板
+        alerts_group = QGroupBox("🚨 质量警报")
         alerts_layout = QVBoxLayout(alerts_group)
         
         self.alerts_text = QTextEdit()
         self.alerts_text.setReadOnly(True)
         self.alerts_text.setMaximumHeight(100)
-        self.alerts_text.setPlaceholderText("No quality alerts...")
+        self.alerts_text.setPlaceholderText("暂无质量警报...")
         alerts_layout.addWidget(self.alerts_text)
         
         left_layout.addWidget(alerts_group)
@@ -396,20 +396,20 @@ class DesktopApp(QMainWindow):
         # Add left widget to splitter
         main_splitter.addWidget(left_widget)
         
-        # Right section: AI Insights Panel (takes right side of splitter)
-        ai_insights_group = QGroupBox("🤖 AI Quality Insights")
+        # 右侧部分：AI智能分析面板
+        ai_insights_group = QGroupBox("🤖 AI智能质量分析")
         ai_insights_layout = QVBoxLayout(ai_insights_group)
         
-        # AI Insights text area (larger on right side)
+        # AI分析文本区域（右侧较大区域）
         self.ai_insights_text = QTextEdit()
         self.ai_insights_text.setReadOnly(True)
         self.ai_insights_text.setMinimumHeight(200)
-        self.ai_insights_text.setPlaceholderText("AI insights will appear here... Click 'Full Screen' for detailed view")
+        self.ai_insights_text.setPlaceholderText("AI智能分析将在此显示... 点击'全屏查看'获取详细视图")
         self.ai_insights_text.setStyleSheet("background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; font-size: 10pt;")
         ai_insights_layout.addWidget(self.ai_insights_text)
         
-        # Full screen button
-        self.fullscreen_insights_btn = QPushButton("🔍 View AI Insights Full Screen")
+        # 全屏按钮
+        self.fullscreen_insights_btn = QPushButton("🔍 全屏查看AI分析")
         self.fullscreen_insights_btn.setStyleSheet("background-color: #007bff; color: white; padding: 8px; border-radius: 4px; font-weight: bold;")
         self.fullscreen_insights_btn.clicked.connect(self.show_fullscreen_insights)
         ai_insights_layout.addWidget(self.fullscreen_insights_btn)
@@ -431,20 +431,20 @@ class DesktopApp(QMainWindow):
         # Create chart display areas
         self.chart_displays = {}
         chart_types = [
-            ('histogram', '📊 Histogram'),
-            ('boxplot', '📦 Box Plot'),
-            ('heatmap', '🔥 Correlation Heatmap'),
-            ('xbar_chart', '📈 X-bar Chart'),
-            ('r_chart', '📉 R Chart'),
-            ('clustering_scatter', '🎯 Clustering'),
-            ('time_series', '⏰ Time Series')
+            ('histogram', '📊 直方图'),
+            ('boxplot', '📦 箱线图'),
+            ('heatmap', '🔥 相关性热力图'),
+            ('xbar_chart', '📈 X-bar控制图'),
+            ('r_chart', '📉 R控制图'),
+            ('clustering_scatter', '🎯 聚类分析'),
+            ('time_series', '⏰ 时间序列')
         ]
         
         for chart_key, chart_name in chart_types:
             chart_tab = QWidget()
             chart_layout = QVBoxLayout(chart_tab)
             
-            chart_label = QLabel(f"Loading {chart_name.split(' ', 1)[1]}...")
+            chart_label = QLabel(f"正在加载{chart_name.split(' ', 1)[1]}...")
             chart_label.setAlignment(Qt.AlignCenter)
             chart_label.setStyleSheet("border: 1px solid gray; min-height: 300px; min-width: 400px;")
             chart_label.setScaledContents(False)
@@ -467,7 +467,7 @@ class DesktopApp(QMainWindow):
         # Update main layout to use vertical splitter
         main_layout.addWidget(vertical_splitter)
         
-        self.tab_widget.addTab(tab, "Statistical Analysis")
+        self.tab_widget.addTab(tab, "统计分析")
     
     def setup_analysis_tab(self):
         """Setup analysis results tab"""
@@ -479,7 +479,7 @@ class DesktopApp(QMainWindow):
         self.analysis_text.setReadOnly(True)
         layout.addWidget(self.analysis_text)
         
-        self.tab_widget.addTab(tab, "Analysis Results")
+        self.tab_widget.addTab(tab, "分析结果")
     
     def upload_file(self):
         """Handle file upload"""
@@ -624,45 +624,45 @@ class DesktopApp(QMainWindow):
             # Pass Rate
             pass_rate_analysis = analysis_data.get('pass_rate_analysis', {})
             pass_rate = pass_rate_analysis.get('pass_rate', 0)
-            self.statistical_metrics['Pass Rate'].setText(f"{pass_rate:.1f}%")
+            self.statistical_metrics['合格率'].setText(f"{pass_rate:.1f}%")
             
             # Process Capability (Cpk)
             process_capability = analysis_data.get('process_capability', {})
             cpk = process_capability.get('cpk', 0)
-            self.statistical_metrics['Cpk (Process Capability)'].setText(f"{cpk:.3f}")
+            self.statistical_metrics['Cpk (过程能力)'].setText(f"{cpk:.3f}")
             
             # Mean Value
             descriptive_stats = analysis_data.get('descriptive_statistics', {})
             mean_val = descriptive_stats.get('mean', 0)
-            self.statistical_metrics['Mean Value'].setText(f"{mean_val:.4f} mm")
+            self.statistical_metrics['平均值'].setText(f"{mean_val:.4f} mm")
             
             # Standard Deviation
             std_val = descriptive_stats.get('std', 0)
-            self.statistical_metrics['Std Deviation'].setText(f"{std_val:.4f} mm")
+            self.statistical_metrics['标准差'].setText(f"{std_val:.4f} mm")
             
             # Tolerance Utilization
             tolerance_util = analysis_data.get('tolerance_utilization', {})
             util_pct = tolerance_util.get('utilization_percentage', 0)
-            self.statistical_metrics['Tolerance Utilization'].setText(f"{util_pct:.1f}%")
+            self.statistical_metrics['公差利用率'].setText(f"{util_pct:.1f}%")
             
             # Process Status (based on capability)
-            capability_assessment = process_capability.get('capability_assessment', 'Unknown')
+            capability_assessment = process_capability.get('capability_assessment', '未知')
             status_color = self.get_status_color(capability_assessment)
-            self.statistical_metrics['Process Status'].setText(capability_assessment)
-            self.statistical_metrics['Process Status'].setStyleSheet(f"font-weight: bold; color: {status_color};")
+            self.statistical_metrics['过程状态'].setText(capability_assessment)
+            self.statistical_metrics['过程状态'].setStyleSheet(f"font-weight: bold; color: {status_color};")
             
         except Exception as e:
             pass
     
     def get_status_color(self, capability_assessment):
         """Get color based on process capability assessment"""
-        if 'Excellent' in capability_assessment:
+        if '优秀' in capability_assessment:
             return '#28a745'  # Green
-        elif 'Good' in capability_assessment:
+        elif '良好' in capability_assessment:
             return '#17a2b8'  # Blue
-        elif 'Adequate' in capability_assessment:
+        elif '充分' in capability_assessment:
             return '#ffc107'  # Yellow
-        elif 'Poor' in capability_assessment:
+        elif '不足' in capability_assessment or '临界' in capability_assessment:
             return '#fd7e14'  # Orange
         else:
             return '#dc3545'  # Red
@@ -672,14 +672,14 @@ class DesktopApp(QMainWindow):
         try:
             alerts = analysis_data.get('alerts', [])
             if not alerts:
-                self.alerts_text.setPlainText("✅ No quality alerts - Process is running within specifications")
+                self.alerts_text.setPlainText("✅ 无质量警报 - 过程运行在规格范围内")
                 self.alerts_text.setStyleSheet("color: #28a745;")  # Green
             else:
                 alert_text = ""
                 for alert in alerts:
                     severity = alert.get('severity', 'info')
                     icon = '🚨' if severity == 'critical' else '⚠️' if severity == 'warning' else 'ℹ️'
-                    alert_text += f"{icon} {alert.get('message', 'Unknown alert')}\n"
+                    alert_text += f"{icon} {alert.get('message', '未知警报')}\n"
                 
                 self.alerts_text.setPlainText(alert_text.strip())
                 self.alerts_text.setStyleSheet("color: #dc3545;")  # Red
@@ -707,7 +707,7 @@ class DesktopApp(QMainWindow):
                 
                 # Enable full-screen button
                 self.fullscreen_insights_btn.setEnabled(True)
-                self.fullscreen_insights_btn.setText("🔍 View AI Insights Full Screen")
+                self.fullscreen_insights_btn.setText("🔍 全屏查看AI分析")
                 
                 # Update full-screen window if it's open
                 if self.fullscreen_insights_window and hasattr(self, 'fullscreen_insights_text'):
@@ -716,7 +716,7 @@ class DesktopApp(QMainWindow):
                 self.ai_insights_text.setPlainText("🔄 Generating AI insights...")
                 self.ai_insights_text.setStyleSheet("background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; color: #6c757d;")
                 self.fullscreen_insights_btn.setEnabled(False)
-                self.fullscreen_insights_btn.setText("⏳ Waiting for AI insights...")
+                self.fullscreen_insights_btn.setText("⏳ 等待AI分析...")
         
         except Exception as e:
             self.ai_insights_text.setPlainText(f"❌ Error displaying AI insights: {e}")
@@ -725,13 +725,13 @@ class DesktopApp(QMainWindow):
     def show_fullscreen_insights(self):
         """Show AI insights in a full-screen window"""
         if not self.current_ai_insights:
-            QMessageBox.information(self, "AI Insights", "No AI insights available yet. Please wait for analysis data.")
+            QMessageBox.information(self, "AI智能分析", "暂无AI分析数据，请等待分析数据生成。")
             return
         
         # Create or update full-screen window
         if not self.fullscreen_insights_window:
             self.fullscreen_insights_window = QMainWindow()
-            self.fullscreen_insights_window.setWindowTitle("🤖 AI Quality Insights - Full Screen")
+            self.fullscreen_insights_window.setWindowTitle("🤖 AI智能质量分析 - 全屏显示")
             self.fullscreen_insights_window.setWindowState(Qt.WindowMaximized)
             
             # Create central widget
@@ -740,7 +740,7 @@ class DesktopApp(QMainWindow):
             layout = QVBoxLayout(central_widget)
             
             # Header
-            header_label = QLabel("🤖 AI-Powered Manufacturing Quality Analysis")
+            header_label = QLabel("🤖 AI智能制造质量分析")
             header_label.setAlignment(Qt.AlignCenter)
             header_label.setStyleSheet("font-size: 18pt; font-weight: bold; color: #2c3e50; padding: 15px; background-color: #ecf0f1; border-radius: 8px; margin-bottom: 10px;")
             layout.addWidget(header_label)
@@ -762,7 +762,7 @@ class DesktopApp(QMainWindow):
             layout.addWidget(self.fullscreen_insights_text)
             
             # Close button
-            close_btn = QPushButton("❌ Close Full Screen")
+            close_btn = QPushButton("❌ 关闭全屏")
             close_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 12px; font-size: 12pt; font-weight: bold; border-radius: 6px;")
             close_btn.clicked.connect(self.fullscreen_insights_window.hide)
             layout.addWidget(close_btn)
