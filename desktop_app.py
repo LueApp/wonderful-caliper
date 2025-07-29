@@ -619,40 +619,90 @@ class DesktopApp(QMainWindow):
             pass
     
     def update_statistical_metrics(self, analysis_data):
-        """Update statistical metrics display"""
+        """Update statistical metrics display for multi-step analysis"""
         try:
-            # Pass Rate
-            pass_rate_analysis = analysis_data.get('pass_rate_analysis', {})
-            pass_rate = pass_rate_analysis.get('pass_rate', 0)
-            self.statistical_metrics['合格率'].setText(f"{pass_rate:.1f}%")
-            
-            # Process Capability (Cpk)
-            process_capability = analysis_data.get('process_capability', {})
-            cpk = process_capability.get('cpk', 0)
-            self.statistical_metrics['Cpk (过程能力)'].setText(f"{cpk:.3f}")
-            
-            # Mean Value
-            descriptive_stats = analysis_data.get('descriptive_statistics', {})
-            mean_val = descriptive_stats.get('mean', 0)
-            self.statistical_metrics['平均值'].setText(f"{mean_val:.4f} mm")
-            
-            # Standard Deviation
-            std_val = descriptive_stats.get('std', 0)
-            self.statistical_metrics['标准差'].setText(f"{std_val:.4f} mm")
-            
-            # Tolerance Utilization
-            tolerance_util = analysis_data.get('tolerance_utilization', {})
-            util_pct = tolerance_util.get('utilization_percentage', 0)
-            self.statistical_metrics['公差利用率'].setText(f"{util_pct:.1f}%")
-            
-            # Process Status (based on capability)
-            capability_assessment = process_capability.get('capability_assessment', '未知')
-            status_color = self.get_status_color(capability_assessment)
-            self.statistical_metrics['过程状态'].setText(capability_assessment)
-            self.statistical_metrics['过程状态'].setStyleSheet(f"font-weight: bold; color: {status_color};")
+            # Check if this is multi-step analysis
+            if 'overall_summary' in analysis_data:
+                # Multi-step analysis
+                overall_summary = analysis_data.get('overall_summary', {})
+                
+                # Overall Pass Rate
+                avg_pass_rate = overall_summary.get('average_pass_rate', 0)
+                self.statistical_metrics['合格率'].setText(f"{avg_pass_rate:.1f}% (平均)")
+                
+                # Overall Process Capability (Cpk)
+                avg_cpk = overall_summary.get('average_cpk', 0)
+                self.statistical_metrics['Cpk (过程能力)'].setText(f"{avg_cpk:.3f} (平均)")
+                
+                # Step Count and Measurements
+                step_count = overall_summary.get('total_steps', 0)
+                total_measurements = overall_summary.get('total_measurements', 0)
+                self.statistical_metrics['平均值'].setText(f"{step_count}个步骤")
+                self.statistical_metrics['标准差'].setText(f"{total_measurements}次测量")
+                
+                # Step Consistency
+                consistency = overall_summary.get('step_consistency', '未知')
+                self.statistical_metrics['公差利用率'].setText(f"步骤一致性: {consistency}")
+                
+                # Overall Process Status
+                worst_step = overall_summary.get('worst_performing_step') or {}
+                if worst_step and 'cpk' in worst_step:
+                    worst_cpk = worst_step.get('cpk', 0)
+                    worst_capability = self.assess_capability(worst_cpk)
+                else:
+                    worst_capability = '未知'
+                
+                status_color = self.get_status_color(worst_capability)
+                self.statistical_metrics['过程状态'].setText(f"整体: {worst_capability}")
+                self.statistical_metrics['过程状态'].setStyleSheet(f"font-weight: bold; color: {status_color};")
+                
+            else:
+                # Legacy single-step analysis
+                # Pass Rate
+                pass_rate_analysis = analysis_data.get('pass_rate_analysis', {})
+                pass_rate = pass_rate_analysis.get('pass_rate', 0)
+                self.statistical_metrics['合格率'].setText(f"{pass_rate:.1f}%")
+                
+                # Process Capability (Cpk)
+                process_capability = analysis_data.get('process_capability', {})
+                cpk = process_capability.get('cpk', 0)
+                self.statistical_metrics['Cpk (过程能力)'].setText(f"{cpk:.3f}")
+                
+                # Mean Value
+                descriptive_stats = analysis_data.get('descriptive_statistics', {})
+                mean_val = descriptive_stats.get('mean', 0)
+                self.statistical_metrics['平均值'].setText(f"{mean_val:.4f} mm")
+                
+                # Standard Deviation
+                std_val = descriptive_stats.get('std', 0)
+                self.statistical_metrics['标准差'].setText(f"{std_val:.4f} mm")
+                
+                # Tolerance Utilization
+                tolerance_util = analysis_data.get('tolerance_utilization', {})
+                util_pct = tolerance_util.get('utilization_percentage', 0)
+                self.statistical_metrics['公差利用率'].setText(f"{util_pct:.1f}%")
+                
+                # Process Status (based on capability)
+                capability_assessment = process_capability.get('capability_assessment', '未知')
+                status_color = self.get_status_color(capability_assessment)
+                self.statistical_metrics['过程状态'].setText(capability_assessment)
+                self.statistical_metrics['过程状态'].setStyleSheet(f"font-weight: bold; color: {status_color};")
             
         except Exception as e:
             pass
+    
+    def assess_capability(self, cpk):
+        """Assess process capability based on CPK value"""
+        if cpk >= 2.0:
+            return "优秀"
+        elif cpk >= 1.67:
+            return "良好"
+        elif cpk >= 1.33:
+            return "充分"
+        elif cpk >= 1.0:
+            return "临界"
+        else:
+            return "不足"
     
     def get_status_color(self, capability_assessment):
         """Get color based on process capability assessment"""
@@ -776,7 +826,20 @@ class DesktopApp(QMainWindow):
     def update_charts_display(self, analysis_data):
         """Update charts display from latest OSS chart images"""
         try:
-            charts = analysis_data.get('charts', {})
+            # Handle multi-step analysis structure
+            if 'overall_summary' in analysis_data:
+                # Multi-step analysis - use overall charts and first step charts as fallback
+                charts = analysis_data.get('overall_charts', {})
+                
+                # If overall charts are not available, use charts from first step
+                if not charts:
+                    step_analysis = analysis_data.get('step_analysis', {})
+                    if step_analysis:
+                        first_step = next(iter(step_analysis.values()), {})
+                        charts = first_step.get('charts', {})
+            else:
+                # Legacy single-step analysis
+                charts = analysis_data.get('charts', {})
             
             for chart_key, chart_label in self.chart_displays.items():
                 oss_key = charts.get(chart_key)
